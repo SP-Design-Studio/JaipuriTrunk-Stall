@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+/* The brand palette, taken from the logo: its deep maroon ground, the orange of
+   the key and the peach of the wordmark. The names are kept from the site's
+   tokens (olive is now the burnt orange used for secondary text and borders). */
+@theme {
+  --color-maroon: #7f1634;
+  --color-maroon-deep: #5a0f25;
+  --color-rose: #c4566e;
+  --color-blush: #f7cfa8;
+  --color-petal: #f9e6d6;
+  --color-sage: #f2b77e;
+  --color-olive: #b0541a;
+  --color-olive-deep: #7d3a10;
+  --color-sand: #e3c3a0;
+  --color-cream: #fbf3ea;
+  --color-ink: #261a1c;
+
+  --font-display: var(--font-marcellus), "Marcellus", serif;
+  --font-script: var(--font-shivaraja), var(--font-yatra), cursive;
+  --font-body: var(--font-jost), ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--color-cream);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  margin: 0;
+  overflow-x: hidden;
+  /* A till is tapped, not zoomed. Without this iPad Safari waits to see whether
+     a second tap is a double-tap-to-zoom before it reports the first. */
+  touch-action: manipulation;
+}

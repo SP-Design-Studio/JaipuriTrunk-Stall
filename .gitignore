@@ -1,0 +1,42 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+
+# env files — the template is the one exception, it carries no secrets
+.env*
+!.env.example
+
+# the SQL and the Supabase folder stay on this machine, as in JaipuriTrunk
+/supabase
+*.sql
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# dev-only stand-in for the database (see src/lib/devstore.ts)
+.stall-dev-data.json
+
+# alternate dist dirs (see next.config.ts)
+.next-*
+DEPLOY.md
+.env.example
+
+# supabase scripts
+/supabase/*
