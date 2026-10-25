@@ -134,6 +134,32 @@ export async function findByInvoice(invoiceNo: string): Promise<Sale | null> {
   return row ? fromRow(row) : null;
 }
 
+/** Puts back a sale from a backup, keeping its bill number. */
+export async function restoreSale(
+  sale: Sale,
+): Promise<"added" | "skipped" | "conflict"> {
+  if (await findSale(sale.id)) return "skipped";
+  const res = await fetch(`${base()}/rest/v1/stall_sales`, {
+    method: "POST",
+    headers: { ...headers(), prefer: "return=minimal" },
+    body: JSON.stringify(toRow(sale)),
+  });
+  if (res.ok) return "added";
+  const detail = await res.text();
+  if (res.status === 409 || detail.includes('"23505"')) return "conflict";
+  throw new Error(`supabase responded ${res.status}: ${detail}`);
+}
+
+/** Removes every sale. PostgREST insists on a filter, so this matches all ids. */
+export async function deleteAllSales(): Promise<void> {
+  const res = await fetch(
+    `${base()}/rest/v1/stall_sales?id=neq.00000000-0000-0000-0000-000000000000`,
+    { method: "DELETE", headers: headers() },
+  );
+  if (!res.ok)
+    throw new Error(`supabase responded ${res.status}: ${await res.text()}`);
+}
+
 export async function listSales(limit = 500): Promise<Sale[]> {
   const res = await fetch(
     `${base()}/rest/v1/stall_sales?select=*&order=created_at.desc&limit=${limit}`,

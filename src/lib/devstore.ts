@@ -55,6 +55,23 @@ export async function findByInvoice(invoiceNo: string): Promise<Sale | null> {
   return (await load()).sales.find((s) => s.invoiceNo === invoiceNo) ?? null;
 }
 
+export async function restoreSale(
+  sale: Sale,
+): Promise<"added" | "skipped" | "conflict"> {
+  const d = await load();
+  if (d.sales.some((s) => s.id === sale.id)) return "skipped";
+  if (d.sales.some((s) => s.invoiceNo === sale.invoiceNo)) return "conflict";
+  d.sales.push(sale);
+  await save(d);
+  return "added";
+}
+
+export async function deleteAllSales(): Promise<void> {
+  const d = await load();
+  d.sales = [];
+  await save(d);
+}
+
 export async function listSales(limit = 500): Promise<Sale[]> {
   const d = await load();
   return [...d.sales]

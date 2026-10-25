@@ -38,6 +38,12 @@ const digest = (s: string) => createHash("sha256").update(s).digest();
 const safeEqual = (a: string, b: string) =>
   timingSafeEqual(digest(a), digest(b));
 
+/** For re-confirming a destructive action: the signed-in user's own password. */
+export function passwordMatches(password: string): boolean {
+  const c = creds();
+  return c !== null && safeEqual(password, c.password);
+}
+
 export function checkCredentials(email: string, password: string): boolean {
   const c = creds();
   if (!c) return false;

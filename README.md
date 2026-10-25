@@ -108,3 +108,12 @@ This is a note for the owner, not legal advice; confirm with your CA.
 - A customer name is required on every bill.
 - WhatsApp opens through `whatsapp://` (straight into the app, no web page); a
   small "use the web link" fallback sits under it.
+- Settings → Start again: deletes every bill and takes the bill number back to
+  0001 (the number is "one more than the latest bill", so there is nothing
+  else to reset). Offers a backup CSV first; needs the word DELETE and the login
+  password. Bills are tax records: use it for clearing test sales only.
+- Settings → Backup & restore: "Download backup" saves every bill as a `.json`
+  file that can be put back with "Restore from backup…" (keeps bill numbers,
+  skips bills already there, recomputes totals, so a doctored file can't change
+  an amount). The Bills/Items CSVs on the Sales tab are reports and can't be
+  imported. "Delete all bills" offers this backup first.

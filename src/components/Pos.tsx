@@ -38,7 +38,7 @@ const gateButton =
 
 export default function Pos() {
   const router = useRouter();
-  const { sales, conn, refresh, save } = useSales();
+  const { sales, conn, refresh, save, clear } = useSales();
   const items = useCatalog();
   const qr = useUpiQr();
   const templates = useTemplates();
@@ -256,7 +256,15 @@ export default function Pos() {
           onRetry={items.retry}
         />
       )}
-      {view === "settings" && <Settings qr={qr} templates={templates} />}
+      {view === "settings" && (
+        <Settings
+          qr={qr}
+          templates={templates}
+          sales={sales}
+          onWiped={clear}
+          onRestored={() => void refresh()}
+        />
+      )}
 
       {receipt && (
         <ReceiptSheet

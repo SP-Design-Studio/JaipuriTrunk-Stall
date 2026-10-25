@@ -31,6 +31,8 @@ export const getSetting = <T>(id: string) => via().getSetting<T>(id);
 export const putSetting = (id: string, data: unknown) =>
   via().putSetting(id, data);
 export const deleteSetting = (id: string) => via().deleteSetting(id);
+export const restoreSale = (s: Sale) => via().restoreSale(s);
+export const deleteAllSales = () => via().deleteAllSales();
 export const findSale = (id: string) => via().findSale(id);
 export const findByInvoice = (n: string) => via().findByInvoice(n);
 export const listSales = (limit?: number) => via().listSales(limit);

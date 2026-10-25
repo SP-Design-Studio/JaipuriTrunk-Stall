@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { noStore, requestHasSession, sameOrigin } from "@/lib/guard";
-import { insertSale, listSales, available } from "@/lib/store";
+import { passwordMatches } from "@/lib/session";
+import { available, deleteAllSales, insertSale, listSales } from "@/lib/store";
 import { withProof } from "@/lib/receiptlink";
 import { parseSale } from "@/lib/validate";
 
@@ -103,5 +104,37 @@ export async function POST(request: Request) {
       { error: "Could not save the sale." },
       { status: 502, headers: noStore },
     );
+  }
+}
+
+/**
+ * Deletes every sale, and with them the bill count: the next bill is 0001 again.
+ * Permanent, and these are tax records, so it asks for the login password again
+ * and the word DELETE, on top of being signed in.
+ */
+export async function DELETE(request: Request) {
+  const reply = (error: string, status: number) =>
+    NextResponse.json({ error }, { status, headers: noStore });
+  if (!sameOrigin(request)) return reply("Bad origin.", 403);
+  if (!requestHasSession(request)) return reply("Sign in again.", 401);
+  let body: { password?: unknown; confirm?: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    return reply("Malformed request.", 400);
+  }
+  if (body.confirm !== "DELETE") return reply("Type DELETE to confirm.", 400);
+  if (typeof body.password !== "string" || !passwordMatches(body.password)) {
+    await new Promise((r) => setTimeout(r, 700));
+    return reply("That password isn’t right.", 403);
+  }
+  if (!available()) return reply("storage-not-configured", 503);
+  try {
+    await deleteAllSales();
+    console.warn("[stall] all sales deleted by the signed-in user");
+    return NextResponse.json({ ok: true }, { headers: noStore });
+  } catch (err) {
+    console.error("[stall] could not delete sales:", err);
+    return reply("Could not delete the bills.", 502);
   }
 }

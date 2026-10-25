@@ -53,7 +53,12 @@ function parseLine(v: unknown): Line | null {
  * an iPad at a stall, on whatever network, running whatever version of the page
  * it last cached — so its arithmetic is treated as a suggestion.
  */
-export function parseSale(body: unknown): Result {
+export function parseSale(
+  body: unknown,
+  /** Restoring a backup: keeps the bill number it had, and allows a blank name
+   *  (bills from before the name was required have none). */
+  restore = false,
+): Result {
   if (!isObj(body)) return { ok: false, error: "Body must be an object." };
 
   if (typeof body.id !== "string" || !UUID.test(body.id))
@@ -64,9 +69,15 @@ export function parseSale(body: unknown): Result {
   if (!Number.isFinite(created) || created > Date.now() + 24 * 3600 * 1000)
     return { ok: false, error: "Bad sale time." };
 
+  if (
+    restore &&
+    (typeof body.invoiceNo !== "string" ||
+      !/^JT-\d{8}-\d{6}-\d{4,}$/.test(body.invoiceNo))
+  )
+    return { ok: false, error: "Bad bill number." };
   if (!text(body.customerName, 80))
     return { ok: false, error: "Name is too long." };
-  if (body.customerName.trim() === "")
+  if (!restore && body.customerName.trim() === "")
     return { ok: false, error: "The customer’s name is needed." };
   if (
     typeof body.customerPhone !== "string" ||
@@ -100,7 +111,7 @@ export function parseSale(body: unknown): Result {
   const input: SaleInput = {
     id: body.id.toLowerCase(),
     // Given out by the server when the sale is stored; never taken from the till.
-    invoiceNo: "",
+    invoiceNo: restore ? String(body.invoiceNo) : "",
     createdAt: new Date(created).toISOString(),
     customerName: body.customerName.trim(),
     customerPhone: body.customerPhone,

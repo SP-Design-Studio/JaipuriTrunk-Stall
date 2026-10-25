@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { itemsToCsv, salesToCsv } from "@/lib/csv";
+import { download } from "@/lib/download";
 import { itemRows } from "@/lib/report";
 import { followUpText, waLink, type Templates } from "@/lib/messages";
 import { inr, variantOf } from "@/lib/money";
@@ -16,19 +17,6 @@ const tab = (on: boolean) =>
       ? "bg-maroon border-maroon text-cream"
       : "border-maroon/25 text-maroon hover:bg-petal"
   }`;
-
-function download(name: string, text: string) {
-  // The BOM makes Excel read the file as UTF-8, so ₹ and names survive.
-  const blob = new Blob(["﻿" + text], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
-}
 
 export default function Sales({
   sales,

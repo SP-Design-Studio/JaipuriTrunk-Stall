@@ -136,5 +136,8 @@ export function useSales() {
     };
   }, [refresh]);
 
-  return { sales, conn, refresh, save };
+  /** After the server has deleted everything: empty the list on screen. */
+  const clear = useCallback(() => setSales([]), []);
+
+  return { sales, conn, refresh, save, clear };
 }
