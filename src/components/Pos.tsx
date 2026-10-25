@@ -141,8 +141,8 @@ function PosScreen() {
         </p>
         <p className="text-sm">
           Set <code>SUPABASE_URL</code> and{" "}
-          <code>SUPABASE_SERVICE_ROLE_KEY</code> for this deployment, run{" "}
-          <code>supabase/stall.sql</code>, then redeploy.
+          <code>SUPABASE_SERVICE_ROLE_KEY</code> for this deployment, run the
+          files in <code>supabase/migrations</code>, then redeploy.
         </p>
       </Gate>
     );

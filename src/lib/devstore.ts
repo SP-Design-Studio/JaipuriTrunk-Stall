@@ -15,6 +15,9 @@ import type { Sale } from "./types";
  * depends on database behaviour against a real project.
  */
 /** Overridable so a test can use a scratch file and leave real dev data alone. */
+// The path is only known at run time, so the build is told not to trace it: this
+// file is never used in production (store.ts picks it only outside production),
+// and tracing it would drag the whole project into the server bundle.
 const FILE = process.env.STALL_DEV_DATA_FILE ?? ".stall-dev-data.json";
 
 type Data = {
@@ -25,13 +28,16 @@ type Data = {
 
 async function load(): Promise<Data> {
   try {
-    return JSON.parse(await readFile(FILE, "utf8")) as Data;
+    return JSON.parse(
+      await readFile(/*turbopackIgnore: true*/ FILE, "utf8"),
+    ) as Data;
   } catch {
     return { sales: [], catalog: null };
   }
 }
 
-const save = (d: Data) => writeFile(FILE, JSON.stringify(d, null, 2));
+const save = (d: Data) =>
+  writeFile(/*turbopackIgnore: true*/ FILE, JSON.stringify(d, null, 2));
 
 export async function insertSale(sale: Sale): Promise<Sale | "busy"> {
   const d = await load();

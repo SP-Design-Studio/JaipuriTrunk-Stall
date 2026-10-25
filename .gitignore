@@ -19,9 +19,10 @@ npm-debug.log*
 .env*
 !.env.example
 
-# the SQL and the Supabase folder stay on this machine, as in JaipuriTrunk
-/supabase
-*.sql
+# Database migrations (supabase/migrations) ARE committed: they are the schema's
+# history and hold no secrets. Anything else SQL-ish stays local.
+/supabase/*
+!/supabase/migrations/
 
 # vercel
 .vercel
@@ -38,5 +39,13 @@ next-env.d.ts
 DEPLOY.md
 .env.example
 
-# supabase scripts
-/supabase/*
+supabase/migrations/0001_create_stall_tables.sql
+.gitignore
+.gitignore
+supabase/migrations/0003_add_stall_to_sales.sql
+supabase/migrations/0002_sales_inserted_at_index.sql
+supabase/migrations/README.md
+README.md
+README.md
+README.md
+README.md

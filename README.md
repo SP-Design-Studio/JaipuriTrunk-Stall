@@ -22,7 +22,8 @@ retried; it is never shown a receipt until the database has confirmed it.
 ## Set up
 
 1. `cp .env.example .env.local` and fill it in (the file explains each value).
-2. Run `supabase/stall.sql` in the Supabase SQL editor.
+2. Run the files in `supabase/migrations/` in the Supabase SQL editor, lowest
+   number first (see `supabase/migrations/README.md`).
 3. `npm install && npm run dev`, then open http://localhost:3000.
 
 With no Supabase keys, `npm run dev` stores everything in `.stall-dev-data.json`
@@ -124,4 +125,4 @@ This is a note for the owner, not legal advice; confirm with your CA.
   Past stalls stay in the list. Pick its days on the in-app calendar (tap one day, or a first and a last day). In Sales, "This stall" shows the current one, the
   stall dropdown shows any past one, "By day" gives a per-day UPI/cash/discount/
   total table for the books, and the CSVs, PDF and backup carry the stall.
-  **Run the updated `supabase/stall.sql` first**: it adds the `stall` column.
+  **Run migration `0003_add_stall_to_sales.sql` first**: it adds the `stall` column.
