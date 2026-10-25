@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useToast } from "./Toasts";
 
 /**
  * The UPI QR, read from the database and held in memory only. `image` is
@@ -33,6 +34,7 @@ async function prepare(file: File): Promise<string> {
 export function useUpiQr() {
   const [image, setImage] = useState<string | null | undefined>(undefined);
   const [error, setError] = useState("");
+  const toast = useToast();
 
   useEffect(() => {
     const first = window.setTimeout(async () => {
@@ -47,26 +49,33 @@ export function useUpiQr() {
     return () => window.clearTimeout(first);
   }, []);
 
-  const upload = useCallback(async (file: File) => {
-    setError("");
-    try {
-      const url = await prepare(file);
-      const res = await fetch("/api/upi-qr", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ image: url }),
-      });
-      if (!res.ok) {
-        const { error: e } = (await res.json().catch(() => ({}))) as {
-          error?: string;
-        };
-        throw new Error(e ?? "Couldn’t save the QR.");
+  const upload = useCallback(
+    async (file: File) => {
+      setError("");
+      try {
+        const url = await prepare(file);
+        const res = await fetch("/api/upi-qr", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ image: url }),
+        });
+        if (!res.ok) {
+          const { error: e } = (await res.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          throw new Error(e ?? "Couldn’t save the QR.");
+        }
+        setImage(url);
+        toast.success("UPI QR saved.");
+      } catch (e) {
+        const message =
+          e instanceof Error ? e.message : "Couldn’t save the QR.";
+        setError(message);
+        toast.error(message);
       }
-      setImage(url);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn’t save the QR.");
-    }
-  }, []);
+    },
+    [toast],
+  );
 
   const remove = useCallback(async () => {
     setError("");
@@ -74,10 +83,12 @@ export function useUpiQr() {
       const res = await fetch("/api/upi-qr", { method: "DELETE" });
       if (!res.ok) throw new Error();
       setImage(null);
+      toast.info("UPI QR removed.");
     } catch {
       setError("Couldn’t remove the QR.");
+      toast.error("Couldn’t remove the QR.");
     }
-  }, []);
+  }, [toast]);
 
   return { image, error, upload, remove };
 }

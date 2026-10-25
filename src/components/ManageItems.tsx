@@ -12,6 +12,7 @@ import {
 } from "@/lib/catalog";
 import { TEST_PRICES } from "@/lib/testPrices";
 import Modal from "./Modal";
+import { useToast } from "./Toasts";
 import type { SaveState } from "./useCatalog";
 
 const box =
@@ -89,6 +90,7 @@ export default function ManageItems({
   const [addingCategory, setAddingCategory] = useState(false);
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
+  const toast = useToast();
 
   const total = catalog.categories.reduce((n, c) => n + c.items.length, 0);
 
@@ -138,6 +140,7 @@ export default function ManageItems({
         },
       ],
     });
+    toast.success(`Added ${label}.`);
     closeAdd();
   }
 
@@ -150,17 +153,21 @@ export default function ManageItems({
         { id: newId(), title, sizes: [], colors: [], items: [] },
       ],
     });
+    toast.success(`Added the category ${title}.`);
     closeAdd();
   }
 
   function confirm() {
     if (!ask) return;
-    if (ask.kind === "reset") onChange(defaultCatalog);
-    else if (ask.kind === "category")
+    if (ask.kind === "reset") {
+      onChange(defaultCatalog);
+      toast.info("Item list reset to the starter items.");
+    } else if (ask.kind === "category") {
       onChange({
         categories: catalog.categories.filter((c) => c.id !== ask.id),
       });
-    else {
+      toast.info("Category removed.");
+    } else {
       // A removed item's uploaded photo goes with it.
       void deleteItemPhoto(ask.itemId);
       onChange({
@@ -170,6 +177,7 @@ export default function ManageItems({
             : c,
         ),
       });
+      toast.info("Item removed.");
     }
     setAsk(null);
   }
@@ -291,7 +299,10 @@ export default function ManageItems({
 
             <ul className="divide-maroon/10 divide-y">
               {c.items.map((i) => (
-                <li key={i.id} className="flex items-center gap-3 px-3 py-2">
+                <li
+                  key={i.id}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2"
+                >
                   <PhotoButton
                     item={i}
                     onChange={(src) => patchItem(c.id, i.id, { src })}
@@ -304,7 +315,7 @@ export default function ManageItems({
                     onCommit={(v) =>
                       v.trim() && patchItem(c.id, i.id, { name: v.trim() })
                     }
-                    className={`${box} min-w-0 flex-1`}
+                    className={`${box} min-w-[9rem] flex-1`}
                   />
                   <div className="relative w-32 shrink-0">
                     <span className="text-ink/40 pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-base">
@@ -468,6 +479,7 @@ function PhotoButton({
 }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const toast = useToast();
   return (
     <div className="shrink-0">
       <label
@@ -493,10 +505,12 @@ function PhotoButton({
             setErr("");
             try {
               onChange(await uploadItemPhoto(item.id, file));
+              toast.success(`Photo added to ${item.name}.`);
             } catch (x) {
-              setErr(
-                x instanceof Error ? x.message : "Couldn’t add the photo.",
-              );
+              const message =
+                x instanceof Error ? x.message : "Couldn’t add the photo.";
+              setErr(message);
+              toast.error(message);
             }
             setBusy(false);
           }}
@@ -507,6 +521,7 @@ function PhotoButton({
           onClick={() => {
             void deleteItemPhoto(item.id);
             onChange(undefined);
+            toast.info(`Photo removed from ${item.name}.`);
           }}
           className="text-ink/50 mt-0.5 block w-full text-center text-[11px] underline"
         >

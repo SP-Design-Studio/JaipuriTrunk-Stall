@@ -11,9 +11,13 @@ import {
 } from "@/lib/messages";
 import { BACKUP_APP, backupOf } from "@/lib/backup";
 import { downloadText } from "@/lib/download";
-import { todayKey } from "@/lib/time";
+import { prettyRange, todayKey } from "@/lib/time";
 import type { Sale } from "@/lib/types";
 import Modal from "./Modal";
+import RangeCalendar from "./RangeCalendar";
+import { useToast } from "./Toasts";
+import type { StallEntry } from "@/lib/types";
+import type { useStalls } from "./useStalls";
 import type { useTemplates } from "./useTemplates";
 import type { useUpiQr } from "./useUpiQr";
 
@@ -25,10 +29,12 @@ export default function Settings({
   qr,
   templates,
   sales,
+  stallList,
   onWiped,
   onRestored,
 }: {
   qr: ReturnType<typeof useUpiQr>;
+  stallList: ReturnType<typeof useStalls>;
   templates: ReturnType<typeof useTemplates>;
   sales: Sale[];
   onWiped: () => void;
@@ -82,6 +88,8 @@ export default function Settings({
           )}
         </section>
 
+        <StallsCard stallList={stallList} className={card} />
+
         <MessageBuilder templates={templates} className={card} />
 
         <BackupCard sales={sales} onRestored={onRestored} className={card} />
@@ -110,6 +118,7 @@ function MessageBuilder({
   const start = templates.saved ?? defaultTemplates();
   const [draft, setDraft] = useState<Templates>(start);
   const [status, setStatus] = useState("");
+  const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [focus, setFocus] = useState<keyof Templates>("receipt");
 
@@ -130,7 +139,10 @@ function MessageBuilder({
 
   async function save() {
     setBusy(true);
-    setStatus((await templates.save(draft)) ?? "Saved.");
+    const err = await templates.save(draft);
+    setStatus(err ?? "Saved.");
+    if (err) toast.error(`Messages not saved: ${err}`);
+    else toast.success("WhatsApp messages saved.");
     setBusy(false);
   }
 
@@ -139,6 +151,8 @@ function MessageBuilder({
     const err = await templates.reset();
     if (!err) setDraft(defaultTemplates());
     setStatus(err ?? "Back to the standard wording.");
+    if (err) toast.error(`Couldn’t reset: ${err}`);
+    else toast.info("Messages are back to the standard wording.");
     setBusy(false);
   }
 
@@ -248,6 +262,7 @@ function DangerZone({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+  const toast = useToast();
 
   function close() {
     setStep(0);
@@ -270,13 +285,16 @@ function DangerZone({
           error?: string;
         };
         setError(e ?? "Couldn’t delete.");
+        toast.error(e ?? "Couldn’t delete the bills.");
       } else {
         onWiped();
         setDone(true);
         close();
+        toast.success("All bills deleted. The next bill will be 0001.");
       }
     } catch {
       setError("No connection.");
+      toast.error("No connection. Nothing was deleted.");
     }
     setBusy(false);
   }
@@ -322,13 +340,14 @@ function DangerZone({
             the bill numbers start again at 0001.
           </p>
           <button
-            onClick={() =>
+            onClick={() => {
               downloadText(
                 `JaipuriTrunk-bills-backup-${todayKey()}.json`,
                 backupOf(sales),
                 "application/json",
-              )
-            }
+              );
+              toast.success(`Backup downloaded · ${sales.length} bills.`);
+            }}
             disabled={sales.length === 0}
             className="border-maroon/30 text-maroon mt-3 min-h-11 w-full border px-4 text-sm font-semibold disabled:opacity-40"
           >
@@ -435,6 +454,7 @@ function BackupCard({
 }) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState("");
+  const toast = useToast();
 
   async function restore(file: File) {
     setBusy(true);
@@ -468,8 +488,26 @@ function BackupCard({
           ".",
       );
       onRestored();
+      // Green if bills came back; amber if some were skipped or unreadable;
+      // blue if there was nothing new.
+      if (total.added > 0 && !total.conflicts && !total.rejected)
+        toast.success(
+          `Restored ${total.added} bill${total.added === 1 ? "" : "s"}.`,
+        );
+      else if (total.added > 0)
+        toast.warning(
+          `Restored ${total.added}, but ${total.conflicts + total.rejected} couldn’t be restored.`,
+        );
+      else if (total.conflicts || total.rejected)
+        toast.error(
+          "No bills restored: the file had unreadable or clashing bills.",
+        );
+      else toast.info("Nothing new: every bill in that file is already here.");
     } catch (e) {
-      setResult(e instanceof Error ? e.message : "Couldn’t read that file.");
+      const message =
+        e instanceof Error ? e.message : "Couldn’t read that file.";
+      setResult(message);
+      toast.error(message);
     }
     setBusy(false);
   }
@@ -485,13 +523,14 @@ function BackupCard({
       </p>
       <div className="flex flex-wrap gap-2">
         <button
-          onClick={() =>
+          onClick={() => {
             downloadText(
               `JaipuriTrunk-bills-backup-${todayKey()}.json`,
               backupOf(sales),
               "application/json",
-            )
-          }
+            );
+            toast.success(`Backup downloaded · ${sales.length} bills.`);
+          }}
           disabled={sales.length === 0}
           className="bg-maroon text-cream min-h-11 px-4 text-sm font-semibold disabled:opacity-45"
         >
@@ -519,6 +558,223 @@ function BackupCard({
           {result}
         </p>
       )}
+    </section>
+  );
+}
+
+/**
+ * The stalls: one for each time the market happens, tracked on its own for the
+ * books. Exactly one is "current"; every sale made meanwhile is recorded against
+ * it and the receipt prints its name, address and phone. Start a new one when a
+ * new month's stall begins, and last month's stays in the list, with its sales,
+ * to look back on in Sales.
+ */
+function StallsCard({
+  stallList,
+  className,
+}: {
+  stallList: ReturnType<typeof useStalls>;
+  className: string;
+}) {
+  const toast = useToast();
+  const [draft, setDraft] = useState<StallEntry[]>(stallList.stalls ?? []);
+  const [current, setCurrent] = useState<string | null>(stallList.currentId);
+  const [adopted, setAdopted] = useState(stallList.stalls !== null);
+  if (!adopted && stallList.stalls) {
+    setAdopted(true);
+    setDraft(stallList.stalls);
+    setCurrent(stallList.currentId);
+  }
+  const [busy, setBusy] = useState(false);
+  const dirty =
+    JSON.stringify([draft, current]) !==
+    JSON.stringify([stallList.stalls ?? [], stallList.currentId]);
+
+  const patch = (id: string, p: Partial<StallEntry>) =>
+    setDraft((d) => d.map((s) => (s.id === id ? { ...s, ...p } : s)));
+
+  async function save() {
+    const names = draft.map((s) => s.name.trim().toLowerCase());
+    if (names.some((n) => !n))
+      return void toast.error("Every stall needs a name.");
+    if (new Set(names).size !== names.length)
+      return void toast.error("Two stalls have the same name.");
+    if (draft.some((s) => !s.from || !s.to))
+      return void toast.error("Pick the day or days each stall runs.");
+    if (draft.some((s) => (s.to ?? "") < (s.from ?? "")))
+      return void toast.error("A stall can’t end before it starts.");
+    setBusy(true);
+    const err = await stallList.save(
+      draft.map((s) => ({
+        ...s,
+        name: s.name.trim(),
+        address: s.address.trim(),
+        phone: s.phone.trim(),
+      })),
+      current,
+    );
+    if (err) toast.error(`Stalls not saved: ${err}`);
+    else toast.success("Stalls saved.");
+    setBusy(false);
+  }
+
+  function startNew() {
+    const id = crypto.randomUUID().slice(0, 8);
+    const today = todayKey();
+    setDraft((d) => [
+      { id, name: "", address: "", phone: "", from: today, to: today },
+      ...d,
+    ]);
+    setCurrent(id);
+  }
+
+  const field =
+    "border-maroon/30 bg-white/70 min-h-11 w-full border px-3 text-base";
+  const now = draft.find((s) => s.id === current);
+
+  return (
+    <section className={className}>
+      <h3 className="font-display text-maroon text-lg">Stalls</h3>
+      <p className="text-ink/60 text-sm">
+        Each time the stall happens, start a new one here (for example “November
+        2026 — Lamakaan”). Every bill is recorded against the current stall and
+        its name, address and phone are printed on the receipt. Past stalls stay
+        in the list and in Sales, so each one can be totalled and printed on its
+        own.
+      </p>
+
+      {(() => {
+        const saved = (stallList.stalls ?? []).find(
+          (x) => x.id === stallList.currentId,
+        );
+        return (
+          <div
+            className={`p-3 text-sm ${saved ? "bg-emerald-50 text-emerald-900" : "bg-amber-100 text-amber-950"}`}
+            role="status"
+          >
+            {saved ? (
+              <>
+                Current stall: <strong>{saved.name}</strong>
+                {saved.from ? ` · ${prettyRange(saved.from, saved.to)}` : ""}.
+                New bills go to it.
+              </>
+            ) : (stallList.stalls?.length ?? 0) > 0 ? (
+              <>
+                No stall is current, so new bills aren’t recorded against any.
+                Make one current and save.
+              </>
+            ) : (
+              <>
+                No stall started yet. Bills are saved without one and receipts
+                show the shop address.
+              </>
+            )}
+          </div>
+        );
+      })()}
+      {dirty && (
+        <div
+          role="alert"
+          className="border border-amber-500 bg-amber-100 p-3 text-sm text-amber-950"
+        >
+          <strong>Not saved yet.</strong> Your changes
+          {now ? ` (“${now.name || "new stall"}” as current)` : ""} only take
+          effect after you tap <strong>Save stalls</strong> below.
+        </div>
+      )}
+
+      <button
+        onClick={startNew}
+        disabled={draft.length >= 20}
+        className="bg-maroon text-cream min-h-11 px-4 text-sm font-semibold disabled:opacity-45"
+      >
+        + Start a new stall
+      </button>
+
+      {draft.map((s) => (
+        <div
+          key={s.id}
+          className={`space-y-2 border p-3 ${s.id === current ? "border-emerald-700" : "border-maroon/15"}`}
+        >
+          <input
+            value={s.name}
+            onChange={(e) => patch(s.id, { name: e.target.value })}
+            maxLength={60}
+            placeholder="Name, e.g. November 2026 — Lamakaan"
+            aria-label="Stall name"
+            className={field}
+          />
+          <input
+            value={s.address}
+            onChange={(e) => patch(s.id, { address: e.target.value })}
+            maxLength={160}
+            placeholder="Venue / address (printed on the receipt)"
+            aria-label="Stall address"
+            className={field}
+          />
+          <input
+            value={s.phone}
+            onChange={(e) => patch(s.id, { phone: e.target.value })}
+            maxLength={30}
+            placeholder="Phone (optional)"
+            aria-label="Stall phone"
+            inputMode="tel"
+            className={field}
+          />
+          <RangeCalendar
+            from={s.from}
+            to={s.to}
+            onChange={(from, to) => patch(s.id, { from, to })}
+          />
+          <p className="text-maroon text-sm font-semibold">
+            {s.from ? prettyRange(s.from, s.to) : "Pick the day or days"}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            {s.id === current ? (
+              <>
+                <span className="min-h-11 inline-flex items-center bg-emerald-700 px-3 text-sm font-semibold text-white">
+                  ✓ Current
+                </span>
+                <button
+                  onClick={() => setCurrent(null)}
+                  className="border-maroon/30 text-maroon min-h-11 border px-4 text-sm"
+                >
+                  End this stall
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setCurrent(s.id)}
+                className="border-maroon/30 text-maroon min-h-11 border px-4 text-sm font-semibold"
+              >
+                Make current
+              </button>
+            )}
+            <button
+              onClick={() => {
+                setDraft((d) => d.filter((x) => x.id !== s.id));
+                if (current === s.id) setCurrent(null);
+              }}
+              aria-label={`Remove ${s.name || "this stall"}`}
+              className="ml-auto min-h-11 px-3 text-sm text-red-700 underline"
+            >
+              Remove from list
+            </button>
+          </div>
+        </div>
+      ))}
+
+      <button
+        onClick={() => void save()}
+        disabled={busy || !dirty}
+        className="bg-maroon text-cream min-h-11 px-5 text-sm font-semibold disabled:opacity-45"
+      >
+        {busy ? "Saving…" : "Save stalls"}
+      </button>
+      <p className="text-ink/50 text-xs">
+        Removing a stall from the list doesn’t delete its bills; they keep the
+        stall they were made at.
+      </p>
     </section>
   );
 }

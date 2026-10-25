@@ -31,7 +31,7 @@ export default function ReceiptView({ sale }: { sale: Sale }) {
     "inline-flex min-h-12 w-full items-center justify-center px-4 text-sm font-semibold tracking-wide disabled:opacity-45";
 
   return (
-    <main className="bg-petal/60 flex min-h-dvh flex-col items-center px-4 py-8">
+    <main className="bg-petal/60 flex min-h-dvh flex-col items-center px-0 py-6 min-[400px]:px-4 sm:py-8">
       <div className="w-[360px] max-w-full">
         <Receipt ref={ref} sale={sale} showCustomer={false} />
         <div className="mt-4 grid grid-cols-2 gap-2">

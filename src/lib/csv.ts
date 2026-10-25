@@ -16,6 +16,7 @@ const cell = (v: string | number | boolean) => {
 export function salesToCsv(sales: Sale[]): string {
   const header = [
     "Invoice",
+    "Stall",
     "Date",
     "Time",
     "Customer",
@@ -29,6 +30,7 @@ export function salesToCsv(sales: Sale[]): string {
   ];
   const rows = sales.map((s) => [
     s.invoiceNo,
+    s.stall?.name ?? "",
     prettyDate(s.createdAt),
     prettyTime(s.createdAt),
     s.customerName,
@@ -58,6 +60,7 @@ export function salesToCsv(sales: Sale[]): string {
 export function itemsToCsv(sales: Sale[]): string {
   const header = [
     "Invoice",
+    "Stall",
     "Date",
     "Time",
     "Item",
@@ -71,6 +74,7 @@ export function itemsToCsv(sales: Sale[]): string {
   const rows = sales.flatMap((s) =>
     s.lines.map((l) => [
       s.invoiceNo,
+      s.stall?.name ?? "",
       prettyDate(s.createdAt),
       prettyTime(s.createdAt),
       l.name,

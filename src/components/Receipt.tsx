@@ -1,7 +1,7 @@
 import { forwardRef } from "react";
 import { BUSINESS, PROMO } from "@/lib/config";
 import { describeDiscount, inr, lineTotal, variantOf } from "@/lib/money";
-import { prettyDate, prettyTime } from "@/lib/time";
+import { prettyDate, prettyRange, prettyTime } from "@/lib/time";
 import type { Sale } from "@/lib/types";
 
 /**
@@ -76,20 +76,41 @@ const Receipt = forwardRef<
           style={{ display: "block", margin: "0 auto" }}
         />
         <div style={small({ marginTop: 10 })}>{BUSINESS.tagline}</div>
-        {BUSINESS.address && (
+        {/* Which stall this was bought at, when the till knows. */}
+        {sale.stall && (
           <div
             style={{
-              marginTop: 8,
+              marginTop: 10,
+              fontSize: 13,
+              fontWeight: 600,
+              letterSpacing: "0.04em",
+              color: C.ink,
+            }}
+          >
+            {sale.stall.name}
+          </div>
+        )}
+        {sale.stall?.from && (
+          <div style={{ fontSize: 12, color: C.soft }}>
+            {prettyRange(sale.stall.from, sale.stall.to)}
+          </div>
+        )}
+        {(sale.stall?.address || (!sale.stall && BUSINESS.address)) && (
+          <div
+            style={{
+              marginTop: sale.stall ? 2 : 8,
               fontSize: 12,
               color: C.soft,
               lineHeight: 1.5,
             }}
           >
-            {BUSINESS.address}
+            {sale.stall ? sale.stall.address : BUSINESS.address}
           </div>
         )}
-        {BUSINESS.phone && (
-          <div style={{ fontSize: 12, color: C.soft }}>{BUSINESS.phone}</div>
+        {(sale.stall?.phone || (!sale.stall && BUSINESS.phone)) && (
+          <div style={{ fontSize: 12, color: C.soft }}>
+            {sale.stall ? sale.stall.phone : BUSINESS.phone}
+          </div>
         )}
         {BUSINESS.gstin && (
           <div style={{ fontSize: 12, color: C.soft, letterSpacing: "0.06em" }}>

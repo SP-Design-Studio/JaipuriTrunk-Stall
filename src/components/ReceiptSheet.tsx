@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BUSINESS } from "@/lib/config";
 import { receiptText, waLink, waWebLink, type Templates } from "@/lib/messages";
 import type { Sale } from "@/lib/types";
 import Modal from "./Modal";
+import { useToast } from "./Toasts";
 import Receipt from "./Receipt";
 import { useReceiptFiles } from "./useReceiptFiles";
 
@@ -37,7 +38,22 @@ export default function ReceiptSheet({
   onClose: () => void;
 }) {
   const { ref, named, failed } = useReceiptFiles(sale);
+  const toastOnce = useToast();
   const [note, setNote] = useState("");
+  const toast = toastOnce;
+  useEffect(() => {
+    if (failed)
+      toast.error("Couldn’t make the receipt files. The sale is saved.");
+  }, [failed, toast]);
+  // Can this device share files at all? (iPad/iPhone yes; most desktops no.)
+  const [canShareFiles] = useState(
+    () =>
+      typeof navigator !== "undefined" &&
+      typeof navigator.canShare === "function" &&
+      navigator.canShare({
+        files: [new File(["x"], "r.png", { type: "image/png" })],
+      }),
+  );
   // The link is relative on the server. Customers get the public address if one
   // is set (NEXT_PUBLIC_RECEIPT_BASE_URL, e.g. https://stall.jaipuritrunk.com),
   // whatever address the till itself was opened on; otherwise the till's own.
@@ -51,6 +67,7 @@ export default function ReceiptSheet({
     try {
       await navigator.clipboard.writeText(link);
       setNote("Link copied.");
+      toast.success("Receipt link copied.");
     } catch {
       setNote(link);
     }
@@ -67,6 +84,7 @@ export default function ReceiptSheet({
     // Revoked late: Safari starts the download after the click returns.
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
     setNote(`Saved ${file.name} to Files.`);
+    toast.success(`Saved ${file.name}.`);
   }
 
   function share(file: File | undefined) {
@@ -116,41 +134,39 @@ export default function ReceiptSheet({
             </p>
           )}
           <p className="text-olive/80 text-xs tracking-[0.18em] uppercase">
-            Send as an attachment
+            Send the receipt
           </p>
+          {/* Where the device can share files (an iPad or phone), one Share button
+              per file: its share sheet already has Save to Files and Print. Where it
+              can't (a desktop browser), Share would only download, so the buttons
+              say Download instead. */}
           <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => share(named?.png)}
-              disabled={!ready}
-              className={`${btn} bg-maroon text-cream hover:bg-maroon-deep`}
-            >
-              {ready ? "Image (PNG)" : "Preparing…"}
-            </button>
-            <button
-              onClick={() => share(named?.pdf)}
-              disabled={!ready}
-              className={`${btn} bg-maroon text-cream hover:bg-maroon-deep`}
-            >
-              {ready ? "PDF" : "Preparing…"}
-            </button>
+            {(
+              [
+                ["Image (PNG)", "png"],
+                ["PDF", "pdf"],
+              ] as const
+            ).map(([label, kind]) => (
+              <button
+                key={kind}
+                onClick={() => share(named?.[kind])}
+                disabled={!ready}
+                className={`${btn} bg-maroon text-cream hover:bg-maroon-deep`}
+              >
+                {!ready
+                  ? "Preparing…"
+                  : canShareFiles
+                    ? `Share ${label}`
+                    : `Download ${label}`}
+              </button>
+            ))}
           </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => named && save(named.png)}
-              disabled={!ready}
-              className={outline}
-            >
-              Save image
-            </button>
-            <button
-              onClick={() => named && save(named.pdf)}
-              disabled={!ready}
-              className={outline}
-            >
-              Save PDF
-            </button>
-          </div>
+          {canShareFiles && (
+            <p className="text-ink/50 text-xs">
+              To keep a copy or print it, choose Save to Files or Print in the
+              share sheet.
+            </p>
+          )}
 
           {!link && (
             <p role="alert" className="text-maroon text-sm">

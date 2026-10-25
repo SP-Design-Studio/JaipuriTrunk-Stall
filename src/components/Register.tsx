@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Image from "next/image";
 import { tilesOf, type Catalog, type Tile } from "@/lib/catalog";
 import { inr, lineTotal, totalsFor } from "@/lib/money";
-import type { Discount, Line, PaymentMode, Sale } from "@/lib/types";
+import type { Discount, Line, PaymentMode, Sale, Stall } from "@/lib/types";
 import Modal from "./Modal";
 import type { SaveResult } from "./useSales";
 
@@ -26,10 +26,13 @@ const wholeRupees = (raw: string) => {
 export default function Register({
   catalog,
   qr,
+  stall,
   onSave,
   onCheck,
 }: {
   catalog: Catalog;
+  /** Where this till is today; printed on the receipt and saved with the bill. */
+  stall?: Stall;
   /** The uploaded UPI QR: undefined while loading, null if none yet. */
   qr: string | null | undefined;
   /** Resolves once the database has answered. The receipt opens only on "saved". */
@@ -42,6 +45,8 @@ export default function Register({
   const [flatText, setFlatText] = useState("");
   const [mode, setMode] = useState<PaymentMode>("UPI");
   const [qrOpen, setQrOpen] = useState(false);
+  /** Phones only: the bill is a full-screen sheet over the items. */
+  const [billOpen, setBillOpen] = useState(false);
   const [cashIn, setCashIn] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -192,6 +197,7 @@ export default function Register({
       lines,
       discount,
       paymentMode: mode,
+      ...(stall ? { stall } : {}),
       ...totals,
     };
     setFrozen(sale);
@@ -219,11 +225,11 @@ export default function Register({
   const isPct = (v: number) => discount.kind === "pct" && discount.value === v;
 
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[1fr_360px] lg:grid-cols-[1fr_400px]">
+    <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_auto] md:grid-cols-[1fr_360px] md:grid-rows-[minmax(0,1fr)] lg:grid-cols-[1fr_400px]">
       {/* ── Catalogue ─────────────────────────────────────────────── */}
       <section
         inert={locked}
-        className="flex min-h-0 flex-col md:border-r md:border-maroon/15"
+        className="flex min-h-0 flex-col md:col-start-1 md:row-start-1 md:border-r md:border-maroon/15"
       >
         <div className="space-y-3 p-3">
           <div className="flex gap-2">
@@ -310,7 +316,32 @@ export default function Register({
       </section>
 
       {/* ── Bill ──────────────────────────────────────────────────── */}
-      <section className="bg-petal/40 flex min-h-0 flex-col">
+      {/* Phones: a bar under the items opens the bill as a full-screen sheet. */}
+      <div className="border-maroon/15 bg-cream border-t p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:hidden">
+        <button
+          onClick={() => setBillOpen(true)}
+          className="bg-maroon text-cream flex min-h-14 w-full items-center justify-between px-4 text-base font-semibold"
+        >
+          <span>
+            View bill · {lines.reduce((n, l) => n + l.qty, 0)} item
+            {lines.reduce((n, l) => n + l.qty, 0) === 1 ? "" : "s"}
+          </span>
+          <span>{inr(totals.total)}</span>
+        </button>
+      </div>
+
+      <section
+        className={`${billOpen ? "fixed inset-0 z-40 flex" : "hidden"} bg-cream md:bg-petal/40 min-h-0 flex-col md:static md:z-auto md:col-start-2 md:row-start-1 md:flex`}
+      >
+        <div className="border-maroon/15 flex items-center justify-between border-b px-2 md:hidden">
+          <button
+            onClick={() => setBillOpen(false)}
+            className="text-maroon min-h-12 px-3 text-sm font-semibold"
+          >
+            ← Items
+          </button>
+          <span className="font-display text-maroon pr-3 text-lg">Bill</span>
+        </div>
         <div inert={locked} className="min-h-[88px] flex-1 overflow-y-auto p-3">
           {lines.length === 0 ? (
             <p className="text-ink/45 py-10 text-center text-sm">

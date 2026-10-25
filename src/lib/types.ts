@@ -26,6 +26,23 @@ export type Discount =
 
 export type PaymentMode = "UPI" | "Cash";
 
+/**
+ * Which stall a sale was rung up at. A copy is kept on the sale itself, so a
+ * receipt keeps the name and address it was printed with even if the stall is
+ * later renamed or removed from the list.
+ */
+export type Stall = {
+  name: string;
+  address: string;
+  phone: string;
+  /** The days it runs, as YYYY-MM-DD. The same day twice means a one-day stall. */
+  from?: string;
+  to?: string;
+};
+
+/** A stall in the list staff choose from in Settings. */
+export type StallEntry = Stall & { id: string };
+
 /** What the till sends. Totals are deliberately absent: the server owns them. */
 export type SaleInput = {
   /** Client-generated, so a retried upload is recognised as the same sale. */
@@ -40,6 +57,8 @@ export type SaleInput = {
   lines: Line[];
   discount: Discount;
   paymentMode: PaymentMode;
+  /** Absent on bills made before stalls existed, or when no stalls are set up. */
+  stall?: Stall;
 };
 
 export type Sale = SaleInput & {

@@ -6,6 +6,7 @@ import { inr } from "@/lib/money";
 import { todayKey } from "@/lib/time";
 import type { Sale } from "@/lib/types";
 import Modal from "./Modal";
+import { useToast } from "./Toasts";
 import Receipt from "./Receipt";
 
 /**
@@ -56,6 +57,7 @@ export default function ExportBills({
   const [progress, setProgress] = useState(0);
   const [pages, setPages] = useState<Page[]>([]);
   const [note, setNote] = useState("");
+  const toast = useToast();
   const holder = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -106,12 +108,19 @@ export default function ExportBills({
       if (!cancelled) {
         setPages(out);
         setPhase("done");
+        toast.success(
+          `Ready: ${out.length} page${out.length === 1 ? "" : "s"}.`,
+        );
       }
-    })().catch(() => !cancelled && setPhase("failed"));
+    })().catch(() => {
+      if (cancelled) return;
+      setPhase("failed");
+      toast.error("Couldn’t make the bill files. Try a shorter list.");
+    });
     return () => {
       cancelled = true;
     };
-  }, [phase, bills, label, total]);
+  }, [phase, bills, label, total, toast]);
 
   const stem = `JaipuriTrunk-bills-${todayKey()}`;
   const files = useMemo(() => {
@@ -149,6 +158,7 @@ export default function ExportBills({
       }, i * 400),
     );
     setNote(`Saved ${list.length} file${list.length > 1 ? "s" : ""}.`);
+    toast.success(`Saved ${list.length} file${list.length > 1 ? "s" : ""}.`);
   }
 
   function send(list: File[]) {

@@ -1,6 +1,6 @@
 import type { Catalog } from "./catalog";
 import { invoiceNoFor, seqOf } from "./time";
-import type { Discount, Line, PaymentMode, Sale } from "./types";
+import type { Discount, Line, PaymentMode, Sale, Stall } from "./types";
 
 /**
  * Sales live in Supabase, reached over its REST endpoint with the service-role
@@ -32,6 +32,7 @@ type Row = {
   discount_amount: number;
   total: number;
   payment_mode: PaymentMode;
+  stall?: Stall | null;
 };
 
 const toRow = (s: Sale): Row => ({
@@ -47,6 +48,9 @@ const toRow = (s: Sale): Row => ({
   discount_amount: s.discountAmount,
   total: s.total,
   payment_mode: s.paymentMode,
+  // Left out when there is none, so a database that has not been given the
+  // stall column yet still accepts sales from a till with no stalls set up.
+  ...(s.stall ? { stall: s.stall } : {}),
 });
 
 const fromRow = (r: Row): Sale => ({
@@ -62,6 +66,7 @@ const fromRow = (r: Row): Sale => ({
   discountAmount: r.discount_amount,
   total: r.total,
   paymentMode: r.payment_mode,
+  ...(r.stall ? { stall: r.stall } : {}),
 });
 
 const MAX_TRIES = 8;

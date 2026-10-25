@@ -4,14 +4,16 @@ import Settings from "./Settings";
 import { useTemplates } from "./useTemplates";
 import { useUpiQr } from "./useUpiQr";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BUSINESS } from "@/lib/config";
 import type { Sale } from "@/lib/types";
 import ManageItems from "./ManageItems";
 import ReceiptSheet from "./ReceiptSheet";
 import Register from "./Register";
 import Sales from "./Sales";
+import { ToastProvider, useToast } from "./Toasts";
 import { useCatalog } from "./useCatalog";
+import { useStalls } from "./useStalls";
 import { useSales, type SaveResult } from "./useSales";
 
 function Gate({
@@ -36,12 +38,23 @@ function Gate({
 const gateButton =
   "bg-maroon text-cream hover:bg-maroon-deep inline-flex min-h-12 items-center px-6 font-semibold";
 
+/** The till, with its toasts. */
 export default function Pos() {
+  return (
+    <ToastProvider>
+      <PosScreen />
+    </ToastProvider>
+  );
+}
+
+function PosScreen() {
   const router = useRouter();
+  const toast = useToast();
   const { sales, conn, refresh, save, clear } = useSales();
   const items = useCatalog();
   const qr = useUpiQr();
   const templates = useTemplates();
+  const stallList = useStalls();
   const [view, setView] = useState<"register" | "sales" | "items" | "settings">(
     "register",
   );
@@ -54,10 +67,37 @@ export default function Pos() {
   /** A receipt exists only for a sale the database has confirmed. */
   async function onSave(sale: Sale): Promise<SaveResult> {
     const result = await save(sale);
-    if (result.status === "saved")
+    if (result.status === "saved") {
       setReceipt({ sale: result.sale, fresh: true });
+      toast.success(`Sale saved · ${result.sale.invoiceNo}`);
+    } else {
+      toast.error(`Sale not saved: ${result.message}`);
+    }
     return result;
   }
+
+  // Say so when the cloud is lost, and when it is back.
+  const lastConn = useRef(conn);
+  useEffect(() => {
+    const was = lastConn.current;
+    lastConn.current = conn;
+    if (conn === "down" && was !== "down")
+      toast.error("Can’t reach the cloud. Nothing is saved until it’s back.");
+    else if (conn === "ok" && was === "down") toast.success("Back online.");
+    else if (conn === "signedOut" && was !== "signedOut")
+      toast.warning("You’ve been signed out. Sign in again to keep selling.");
+  }, [conn, toast]);
+
+  // The item list is saved as it is edited; a failure must not go unnoticed.
+  const saveKind = items.save.kind;
+  const lastSave = useRef(saveKind);
+  useEffect(() => {
+    if (saveKind === "failed" && lastSave.current !== "failed")
+      toast.error(
+        "The item list wasn’t saved. Check the connection and retry.",
+      );
+    lastSave.current = saveKind;
+  }, [saveKind, toast]);
 
   /**
    * After a failure that may have reached the server, ask it. If the sale is
@@ -130,6 +170,10 @@ export default function Pos() {
     );
   }
 
+  const stall = (stallList.stalls ?? []).find(
+    (x) => x.id === stallList.currentId,
+  );
+
   const status =
     conn === "signedOut"
       ? { warn: true, text: "Signed out" }
@@ -142,25 +186,46 @@ export default function Pos() {
             : { warn: false, text: "Connected" };
 
   const nav = (on: boolean) =>
-    `inline-flex min-h-11 items-center px-5 text-sm transition-colors ${
+    `inline-flex min-h-11 flex-1 items-center justify-center px-3 text-sm transition-colors sm:flex-none sm:px-5 ${
       on ? "bg-petal text-maroon-deep" : "text-petal/80 hover:text-petal"
     }`;
 
   return (
-    <div className="bg-cream text-ink flex h-dvh flex-col overflow-hidden">
-      <header className="bg-maroon-deep text-petal flex items-center justify-between gap-3 px-4 py-2">
+    <div className="bg-cream text-ink fixed inset-0 flex flex-col overflow-clip">
+      <header className="bg-maroon-deep text-petal flex flex-wrap items-center justify-between gap-x-3 px-3 py-1 sm:flex-nowrap sm:px-4 sm:py-2">
         <div className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/images/logo.png" alt="" className="size-9" />
-          <span className="font-display text-lg tracking-wide">
+          <span className="font-display text-base tracking-wide sm:text-lg">
             {BUSINESS.name}
           </span>
-          <span className="text-petal/60 hidden text-xs tracking-[0.2em] uppercase sm:inline">
-            Stall
-          </span>
+          {stall ? (
+            <button
+              onClick={() => setView("settings")}
+              className="text-petal/80 hover:text-petal max-w-40 truncate text-xs tracking-[0.12em] uppercase underline-offset-4 hover:underline"
+              title="Current stall — tap to change in Settings"
+            >
+              {stall.name}
+            </button>
+          ) : (stallList.stalls?.length ?? 0) > 0 ? (
+            <button
+              onClick={() => setView("settings")}
+              className="max-w-40 truncate bg-amber-400 px-2 py-0.5 text-xs font-semibold text-amber-950"
+              title="Bills aren’t being recorded against any stall"
+            >
+              No stall started
+            </button>
+          ) : (
+            <span className="text-petal/60 hidden text-xs tracking-[0.2em] uppercase sm:inline">
+              Stall
+            </span>
+          )}
         </div>
 
-        <nav className="flex" aria-label="Sections">
+        <nav
+          className="order-last flex w-full sm:order-none sm:w-auto"
+          aria-label="Sections"
+        >
           <button
             onClick={() => setView("register")}
             className={nav(view === "register")}
@@ -190,7 +255,7 @@ export default function Pos() {
           </button>
         </nav>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1 sm:gap-3">
           <button
             onClick={() =>
               items.save.kind === "failed" ? items.retry() : void refresh()
@@ -202,7 +267,9 @@ export default function Pos() {
               className={`size-2 rounded-full ${status.warn ? "bg-blush" : "bg-sage"}`}
               aria-hidden="true"
             />
-            {status.text}
+            <span className={status.warn ? "" : "hidden sm:inline"}>
+              {status.text}
+            </span>
           </button>
           <button
             onClick={signOut}
@@ -237,6 +304,17 @@ export default function Pos() {
           key={till}
           catalog={items.catalog}
           qr={qr.image}
+          stall={
+            stall
+              ? {
+                  name: stall.name,
+                  address: stall.address,
+                  phone: stall.phone,
+                  from: stall.from,
+                  to: stall.to,
+                }
+              : undefined
+          }
           onSave={onSave}
           onCheck={onCheck}
         />
@@ -245,6 +323,7 @@ export default function Pos() {
         <Sales
           sales={sales}
           templates={templates.saved}
+          currentStall={stall?.name}
           onOpen={(sale) => setReceipt({ sale, fresh: false })}
         />
       )}
@@ -259,6 +338,7 @@ export default function Pos() {
       {view === "settings" && (
         <Settings
           qr={qr}
+          stallList={stallList}
           templates={templates}
           sales={sales}
           onWiped={clear}

@@ -6,9 +6,16 @@ import { download } from "@/lib/download";
 import { itemRows } from "@/lib/report";
 import { followUpText, waLink, type Templates } from "@/lib/messages";
 import { inr, variantOf } from "@/lib/money";
-import { dayKey, prettyDate, prettyTime, todayKey } from "@/lib/time";
+import {
+  dayKey,
+  prettyDate,
+  prettyRange,
+  prettyTime,
+  todayKey,
+} from "@/lib/time";
 import type { Sale } from "@/lib/types";
 import ExportBills from "./ExportBills";
+import { useToast } from "./Toasts";
 import VerifyBill from "./VerifyBill";
 
 const tab = (on: boolean) =>
@@ -21,23 +28,46 @@ const tab = (on: boolean) =>
 export default function Sales({
   sales,
   templates,
+  currentStall,
   onOpen,
 }: {
   sales: Sale[];
   templates: Templates | null;
+  /** The stall bills are being recorded against now, if one has been started. */
+  currentStall?: string;
   onOpen: (sale: Sale) => void;
 }) {
   const [range, setRange] = useState<"today" | "all">("today");
-  const [view, setView] = useState<"log" | "sold" | "people">("log");
+  const [view, setView] = useState<
+    "log" | "sold" | "days" | "stalls" | "people"
+  >("log");
   const [verifying, setVerifying] = useState(false);
+  const [stallFilter, setStallFilter] = useState("all");
   const [exporting, setExporting] = useState(false);
+  const toast = useToast();
 
+  const stallNames = useMemo(
+    () =>
+      [...new Set(sales.map((s) => s.stall?.name).filter(Boolean))] as string[],
+    [sales],
+  );
+  // The dropdown lists every stall that has bills, and the current one even
+  // before its first bill, so choosing "This stall" always has an entry.
+  const stallOptions = useMemo(
+    () =>
+      currentStall && !stallNames.includes(currentStall)
+        ? [currentStall, ...stallNames]
+        : stallNames,
+    [stallNames, currentStall],
+  );
   const shown = useMemo(
     () =>
-      range === "all"
-        ? sales
-        : sales.filter((s) => dayKey(s.createdAt) === todayKey()),
-    [sales, range],
+      sales.filter(
+        (s) =>
+          (range === "all" || dayKey(s.createdAt) === todayKey()) &&
+          (stallFilter === "all" || s.stall?.name === stallFilter),
+      ),
+    [sales, range, stallFilter],
   );
 
   const stats = useMemo(() => {
@@ -69,6 +99,94 @@ export default function Sales({
     return [...seen.values()];
   }, [sales]);
 
+  /**
+   * One row per stall across ALL bills (the Today / All and stall filters don't
+   * apply here: this is the side-by-side view), newest stall first.
+   */
+  const stallRows = useMemo(() => {
+    const by = new Map<
+      string,
+      {
+        name: string;
+        first: string;
+        last: string;
+        /** The days the stall was set up to run, when it says. */
+        planned?: { from?: string; to?: string };
+        days: Set<string>;
+        bills: number;
+        units: number;
+        upi: number;
+        cash: number;
+        discount: number;
+        total: number;
+      }
+    >();
+    for (const s of sales) {
+      const name = s.stall?.name ?? "";
+      const r = by.get(name) ?? {
+        name,
+        first: s.createdAt,
+        last: s.createdAt,
+        planned: s.stall?.from
+          ? { from: s.stall.from, to: s.stall.to }
+          : undefined,
+        days: new Set<string>(),
+        bills: 0,
+        units: 0,
+        upi: 0,
+        cash: 0,
+        discount: 0,
+        total: 0,
+      };
+      if (s.createdAt < r.first) r.first = s.createdAt;
+      if (s.createdAt > r.last) r.last = s.createdAt;
+      r.days.add(dayKey(s.createdAt));
+      r.bills += 1;
+      r.units += s.lines.reduce((n, l) => n + l.qty, 0);
+      r.discount += s.discountAmount;
+      r.total += s.total;
+      if (s.paymentMode === "UPI") r.upi += s.total;
+      else r.cash += s.total;
+      by.set(name, r);
+    }
+    return [...by.values()].sort((a, b) => b.last.localeCompare(a.last));
+  }, [sales]);
+
+  /** One row per day in the list, newest first, for the books. */
+  const days = useMemo(() => {
+    const by = new Map<
+      string,
+      {
+        key: string;
+        label: string;
+        bills: number;
+        upi: number;
+        cash: number;
+        discount: number;
+        total: number;
+      }
+    >();
+    for (const s of shown) {
+      const key = dayKey(s.createdAt);
+      const d = by.get(key) ?? {
+        key,
+        label: prettyDate(s.createdAt),
+        bills: 0,
+        upi: 0,
+        cash: 0,
+        discount: 0,
+        total: 0,
+      };
+      d.bills += 1;
+      d.total += s.total;
+      d.discount += s.discountAmount;
+      if (s.paymentMode === "UPI") d.upi += s.total;
+      else d.cash += s.total;
+      by.set(key, d);
+    }
+    return [...by.values()].sort((a, b) => b.key.localeCompare(a.key));
+  }, [shown]);
+
   const kpi = (title: string, value: string, sub?: string) => (
     <div className="border-maroon/15 border bg-white/50 p-4">
       <div className="text-olive/80 text-xs tracking-[0.18em] uppercase">
@@ -90,17 +208,53 @@ export default function Sales({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex gap-2">
             <button
-              onClick={() => setRange("today")}
-              className={tab(range === "today")}
+              onClick={() => {
+                setRange("today");
+                setStallFilter("all");
+              }}
+              className={tab(range === "today" && stallFilter === "all")}
             >
               Today
             </button>
             <button
-              onClick={() => setRange("all")}
-              className={tab(range === "all")}
+              onClick={() => {
+                setRange("all");
+                setStallFilter("all");
+              }}
+              className={tab(range === "all" && stallFilter === "all")}
             >
               All sales
             </button>
+            {currentStall && (
+              <button
+                onClick={() => {
+                  setStallFilter(currentStall);
+                  setRange("all");
+                }}
+                className={tab(range === "all" && stallFilter === currentStall)}
+              >
+                This stall
+              </button>
+            )}
+            {stallOptions.length > 0 && (
+              <select
+                value={stallFilter}
+                onChange={(e) => {
+                  setStallFilter(e.target.value);
+                  // Looking at a past stall means looking at all of its days.
+                  if (e.target.value !== "all") setRange("all");
+                }}
+                aria-label="Filter by stall"
+                className="border-maroon/25 text-maroon min-h-11 border bg-white/70 px-3 text-sm"
+              >
+                <option value="all">All stalls</option>
+                {stallOptions.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
           <div className="flex gap-2">
             <button
@@ -114,24 +268,26 @@ export default function Sales({
               Verify receipt
             </button>
             <button
-              onClick={() =>
+              onClick={() => {
                 download(
                   `JaipuriTrunk-bills-${todayKey()}.csv`,
                   salesToCsv(shown),
-                )
-              }
+                );
+                toast.success("CSV downloaded.");
+              }}
               disabled={shown.length === 0}
               className={`${tab(false)} disabled:opacity-40`}
             >
               Bills CSV
             </button>
             <button
-              onClick={() =>
+              onClick={() => {
                 download(
                   `JaipuriTrunk-items-sold-${todayKey()}.csv`,
                   itemsToCsv(shown),
-                )
-              }
+                );
+                toast.success("CSV downloaded.");
+              }}
               disabled={shown.length === 0}
               className={`${tab(false)} disabled:opacity-40`}
             >
@@ -166,6 +322,18 @@ export default function Sales({
             What sold
           </button>
           <button
+            onClick={() => setView("stalls")}
+            className={tab(view === "stalls")}
+          >
+            By stall
+          </button>
+          <button
+            onClick={() => setView("days")}
+            className={tab(view === "days")}
+          >
+            By day
+          </button>
+          <button
             onClick={() => setView("people")}
             className={tab(view === "people")}
           >
@@ -175,8 +343,28 @@ export default function Sales({
 
         {view === "log" &&
           (shown.length === 0 ? (
-            empty(
-              range === "today" ? "No sales yet today." : "No sales recorded.",
+            stallFilter !== "all" ? (
+              <div className="py-12 text-center text-sm">
+                <p className="text-ink/60">
+                  No bills at “{stallFilter}” yet
+                  {range === "today" ? " today" : ""}.
+                </p>
+                <button
+                  onClick={() => {
+                    setStallFilter("all");
+                    setRange("all");
+                  }}
+                  className="text-maroon mt-2 min-h-11 px-3 underline"
+                >
+                  Show bills from every stall
+                </button>
+              </div>
+            ) : (
+              empty(
+                range === "today"
+                  ? "No sales yet today."
+                  : "No sales recorded.",
+              )
             )
           ) : (
             <ul className={list}>
@@ -184,13 +372,14 @@ export default function Sales({
                 <li key={s.id}>
                   <button
                     onClick={() => onOpen(s)}
-                    className="hover:bg-petal/60 flex min-h-16 w-full items-center gap-4 px-4 py-3 text-left"
+                    className="hover:bg-petal/60 flex min-h-16 w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left sm:flex-nowrap"
                   >
-                    <div className="w-32 shrink-0">
+                    <div className="w-full shrink-0 sm:w-52">
                       <div className="text-sm font-semibold">{s.invoiceNo}</div>
                       <div className="text-ink/45 text-xs">
                         {range === "all" ? `${prettyDate(s.createdAt)}, ` : ""}
                         {prettyTime(s.createdAt)}
+                        {s.stall ? ` · ${s.stall.name}` : ""}
                       </div>
                     </div>
                     <div className="min-w-0 flex-1">
@@ -301,6 +490,166 @@ export default function Sales({
             </>
           ))}
 
+        {view === "stalls" &&
+          (stallRows.length === 0 ? (
+            empty("No bills yet.")
+          ) : (
+            <>
+              <div className="border-maroon/15 overflow-x-auto border bg-white/50">
+                <table className="w-full min-w-[46rem] text-left text-sm">
+                  <thead className="text-olive/80 border-maroon/15 border-b text-xs tracking-[0.14em] uppercase">
+                    <tr>
+                      <th className="px-4 py-3 font-normal">Stall</th>
+                      <th className="px-4 py-3 font-normal">Dates</th>
+                      <th className="px-4 py-3 text-right font-normal">
+                        Bills
+                      </th>
+                      <th className="px-4 py-3 text-right font-normal">
+                        Items
+                      </th>
+                      <th className="px-4 py-3 text-right font-normal">UPI</th>
+                      <th className="px-4 py-3 text-right font-normal">Cash</th>
+                      <th className="px-4 py-3 text-right font-normal">
+                        Discounts
+                      </th>
+                      <th className="px-4 py-3 text-right font-normal">
+                        Takings
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-maroon/10 divide-y">
+                    {stallRows.map((r) => (
+                      <tr
+                        key={r.name || "none"}
+                        onClick={() => {
+                          // Open that stall's own bills.
+                          setStallFilter(r.name || "all");
+                          setRange("all");
+                          setView("log");
+                        }}
+                        className="hover:bg-petal/60 cursor-pointer"
+                      >
+                        <td className="px-4 py-3">
+                          <span className="font-semibold">
+                            {r.name || "No stall"}
+                          </span>
+                          {r.name && r.name === currentStall && (
+                            <span className="ml-2 bg-emerald-700 px-1.5 py-0.5 text-[11px] font-semibold text-white">
+                              Current
+                            </span>
+                          )}
+                        </td>
+                        <td className="text-ink/70 px-4 py-3">
+                          {r.planned?.from
+                            ? prettyRange(r.planned.from, r.planned.to)
+                            : `${prettyDate(r.first)}${
+                                dayKey(r.first) !== dayKey(r.last)
+                                  ? ` – ${prettyDate(r.last)}`
+                                  : ""
+                              }`}
+                          <span className="text-ink/45 block text-xs">
+                            {r.days.size} day{r.days.size === 1 ? "" : "s"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">{r.bills}</td>
+                        <td className="px-4 py-3 text-right">{r.units}</td>
+                        <td className="px-4 py-3 text-right">{inr(r.upi)}</td>
+                        <td className="px-4 py-3 text-right">{inr(r.cash)}</td>
+                        <td className="px-4 py-3 text-right">
+                          {inr(r.discount)}
+                        </td>
+                        <td className="text-maroon px-4 py-3 text-right font-semibold">
+                          {inr(r.total)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="border-maroon/30 border-t-2 font-semibold">
+                    <tr>
+                      <td className="px-4 py-3" colSpan={2}>
+                        All stalls
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {stallRows.reduce((n, r) => n + r.bills, 0)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {stallRows.reduce((n, r) => n + r.units, 0)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {inr(stallRows.reduce((n, r) => n + r.upi, 0))}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {inr(stallRows.reduce((n, r) => n + r.cash, 0))}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {inr(stallRows.reduce((n, r) => n + r.discount, 0))}
+                      </td>
+                      <td className="text-maroon px-4 py-3 text-right">
+                        {inr(stallRows.reduce((n, r) => n + r.total, 0))}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              <p className="text-ink/50 text-xs">
+                Every bill, whatever the Today / All filter says. Tap a stall to
+                open its bills. Item counts are pieces sold.
+              </p>
+            </>
+          ))}
+
+        {view === "days" &&
+          (days.length === 0 ? (
+            empty("No bills in this list.")
+          ) : (
+            <div className="border-maroon/15 overflow-x-auto border bg-white/50">
+              <table className="w-full min-w-[34rem] text-left text-sm">
+                <thead className="text-olive/80 border-maroon/15 border-b text-xs tracking-[0.14em] uppercase">
+                  <tr>
+                    <th className="px-4 py-3 font-normal">Day</th>
+                    <th className="px-4 py-3 text-right font-normal">Bills</th>
+                    <th className="px-4 py-3 text-right font-normal">UPI</th>
+                    <th className="px-4 py-3 text-right font-normal">Cash</th>
+                    <th className="px-4 py-3 text-right font-normal">
+                      Discounts
+                    </th>
+                    <th className="px-4 py-3 text-right font-normal">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-maroon/10 divide-y">
+                  {days.map((d) => (
+                    <tr key={d.key}>
+                      <td className="px-4 py-3">{d.label}</td>
+                      <td className="px-4 py-3 text-right">{d.bills}</td>
+                      <td className="px-4 py-3 text-right">{inr(d.upi)}</td>
+                      <td className="px-4 py-3 text-right">{inr(d.cash)}</td>
+                      <td className="px-4 py-3 text-right">
+                        {inr(d.discount)}
+                      </td>
+                      <td className="text-maroon px-4 py-3 text-right font-semibold">
+                        {inr(d.total)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="border-maroon/30 border-t-2 font-semibold">
+                  <tr>
+                    <td className="px-4 py-3">All days</td>
+                    <td className="px-4 py-3 text-right">{stats.count}</td>
+                    <td className="px-4 py-3 text-right">{inr(stats.upi)}</td>
+                    <td className="px-4 py-3 text-right">{inr(stats.cash)}</td>
+                    <td className="px-4 py-3 text-right">
+                      {inr(days.reduce((n, d) => n + d.discount, 0))}
+                    </td>
+                    <td className="text-maroon px-4 py-3 text-right">
+                      {inr(stats.revenue)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          ))}
+
         {view === "people" &&
           (people.length === 0 ? (
             empty(
@@ -337,7 +686,13 @@ export default function Sales({
       {exporting && (
         <ExportBills
           sales={shown}
-          label={range === "today" ? "Today" : "All sales"}
+          label={
+            stallFilter !== "all"
+              ? stallFilter
+              : range === "today"
+                ? "Today"
+                : "All sales"
+          }
           onClose={() => setExporting(false)}
         />
       )}

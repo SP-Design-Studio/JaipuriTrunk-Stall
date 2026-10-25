@@ -25,14 +25,14 @@ export default function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-ink/55 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-ink/55 p-2 sm:p-4"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label={title}
     >
       <div
-        className={`bg-cream border-maroon/20 my-auto w-full ${large ? "max-w-3xl" : wide ? "max-w-md" : "max-w-sm"} border p-5 shadow-2xl`}
+        className={`bg-cream border-maroon/20 my-auto w-full p-4 sm:p-5 ${large ? "max-w-3xl" : wide ? "max-w-md" : "max-w-sm"} border shadow-2xl`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">

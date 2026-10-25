@@ -5,6 +5,7 @@ import { inr } from "@/lib/money";
 import { prettyDate, prettyTime } from "@/lib/time";
 import type { Sale } from "@/lib/types";
 import Modal from "./Modal";
+import { useToast } from "./Toasts";
 
 /**
  * Staff check of a receipt someone is holding: the bill number and the code
@@ -22,6 +23,7 @@ export default function VerifyBill({ onClose }: { onClose: () => void }) {
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [out, setOut] = useState<Outcome | null>(null);
+  const toast = useToast();
 
   async function check() {
     setBusy(true);
@@ -33,23 +35,25 @@ export default function VerifyBill({ onClose }: { onClose: () => void }) {
         body: JSON.stringify({ invoiceNo, code }),
       });
       if (!res.ok) {
-        setOut({
-          kind: "error",
-          message:
-            res.status === 401
-              ? "Signed out — sign in again."
-              : "Couldn’t check just now.",
-        });
+        const message =
+          res.status === 401
+            ? "Signed out — sign in again."
+            : "Couldn’t check just now.";
+        setOut({ kind: "error", message });
+        toast.error(message);
       } else {
         const body = (await res.json()) as { genuine: boolean; sale?: Sale };
-        setOut(
-          body.genuine && body.sale
-            ? { kind: "genuine", sale: body.sale }
-            : { kind: "no" },
-        );
+        if (body.genuine && body.sale) {
+          setOut({ kind: "genuine", sale: body.sale });
+          toast.success("Genuine receipt: it matches our records.");
+        } else {
+          setOut({ kind: "no" });
+          toast.error("No bill matches that number and code.");
+        }
       }
     } catch {
       setOut({ kind: "error", message: "No connection." });
+      toast.error("No connection.");
     }
     setBusy(false);
   }

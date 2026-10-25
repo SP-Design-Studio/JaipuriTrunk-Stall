@@ -39,6 +39,34 @@ export function seqOf(invoiceNo: string | undefined): number {
   return m ? Number(m[1]) : 0;
 }
 
+/**
+ * A stall's days for display: "25 Oct 2026", "25–26 Oct 2026" or
+ * "30 Oct – 2 Nov 2026". Takes YYYY-MM-DD and reads them as plain dates, so the
+ * device's time zone cannot move a day.
+ */
+export function prettyRange(from?: string, to?: string): string {
+  if (!from) return "";
+  const fmt = (d: string, o: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat("en-IN", { timeZone: "UTC", ...o }).format(
+      new Date(`${d}T00:00:00Z`),
+    );
+  const end = to ?? from;
+  if (end === from)
+    return fmt(from, { day: "numeric", month: "short", year: "numeric" });
+  const sameMonth = from.slice(0, 7) === end.slice(0, 7);
+  const sameYear = from.slice(0, 4) === end.slice(0, 4);
+  const a = sameMonth
+    ? fmt(from, { day: "numeric" })
+    : fmt(
+        from,
+        sameYear
+          ? { day: "numeric", month: "short" }
+          : { day: "numeric", month: "short", year: "numeric" },
+      );
+  const b = fmt(end, { day: "numeric", month: "short", year: "numeric" });
+  return sameMonth ? `${a}–${b}` : `${a} – ${b}`;
+}
+
 /** 2026-10-24, for grouping and for "is this today". */
 export function dayKey(iso: string | Date): string {
   const d = typeof iso === "string" ? new Date(iso) : iso;

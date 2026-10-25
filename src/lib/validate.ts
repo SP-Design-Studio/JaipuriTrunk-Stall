@@ -5,7 +5,7 @@ import {
   type CatalogCategory,
   type CatalogItem,
 } from "./catalog";
-import type { Discount, Line, Sale, SaleInput } from "./types";
+import type { Discount, Line, Sale, SaleInput, Stall } from "./types";
 
 type Result = { ok: true; sale: Sale } | { ok: false; error: string };
 
@@ -108,6 +108,13 @@ export function parseSale(
   if (body.paymentMode !== "UPI" && body.paymentMode !== "Cash")
     return { ok: false, error: "Bad payment mode." };
 
+  let stall: Stall | undefined;
+  if (body.stall !== undefined && body.stall !== null) {
+    const parsed = parseStall(body.stall);
+    if (!parsed) return { ok: false, error: "Bad stall details." };
+    stall = parsed;
+  }
+
   const input: SaleInput = {
     id: body.id.toLowerCase(),
     // Given out by the server when the sale is stored; never taken from the till.
@@ -119,11 +126,44 @@ export function parseSale(
     lines,
     discount,
     paymentMode: body.paymentMode,
+    ...(stall ? { stall } : {}),
   };
   return { ok: true, sale: { ...input, ...totalsFor(lines, discount) } };
 }
 
 const ID = /^[a-z0-9-]{1,40}$/i;
+
+export const STALL_LIMITS = { name: 60, address: 160, phone: 30, count: 20 };
+
+/** A stall's details: a name, and optionally an address and phone to print. */
+export function parseStall(v: unknown): Stall | null {
+  if (!isObj(v)) return null;
+  if (
+    !text(v.name, STALL_LIMITS.name) ||
+    v.name.trim() === "" ||
+    !text(v.address, STALL_LIMITS.address) ||
+    !text(v.phone, STALL_LIMITS.phone)
+  )
+    return null;
+  // Dates are optional (bills from before they existed have none), but if one is
+  // there both are, and the end is not before the start.
+  const day = (d: unknown) =>
+    typeof d === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(d) &&
+    !Number.isNaN(Date.parse(`${d}T00:00:00Z`));
+  const dated = v.from !== undefined || v.to !== undefined;
+  if (
+    dated &&
+    (!day(v.from) || !day(v.to) || (v.to as string) < (v.from as string))
+  )
+    return null;
+  return {
+    name: v.name.trim(),
+    address: v.address.trim(),
+    phone: v.phone.trim(),
+    ...(dated ? { from: v.from as string, to: v.to as string } : {}),
+  };
+}
 
 /** A list of short labels (sizes, colours): bounded, trimmed, none empty. */
 function labels(v: unknown, maxCount: number, maxLen: number): string[] | null {

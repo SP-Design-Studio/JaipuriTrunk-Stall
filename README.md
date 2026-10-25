@@ -117,3 +117,11 @@ This is a note for the owner, not legal advice; confirm with your CA.
   skips bills already there, recomputes totals, so a doctored file can't change
   an amount). The Bills/Items CSVs on the Sales tab are reports and can't be
   imported. "Delete all bills" offers this backup first.
+- Settings → Stalls: a "stall" is each time the market happens (e.g. "November
+  2026 — Lamakaan"). Start a new one each month; exactly one is current, and
+  every bill is recorded against it automatically (no picking at the till). Its
+  name, address and phone are printed on the receipt and saved with the bill.
+  Past stalls stay in the list. Pick its days on the in-app calendar (tap one day, or a first and a last day). In Sales, "This stall" shows the current one, the
+  stall dropdown shows any past one, "By day" gives a per-day UPI/cash/discount/
+  total table for the books, and the CSVs, PDF and backup carry the stall.
+  **Run the updated `supabase/stall.sql` first**: it adds the `stall` column.

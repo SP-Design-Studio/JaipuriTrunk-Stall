@@ -31,6 +31,7 @@ export const PLACEHOLDERS = [
   ["{total}", "amount paid"],
   ["{payment}", "UPI or Cash"],
   ["{link}", "their receipt link"],
+  ["{stall}", "which stall"],
   ["{business}", "shop name"],
   ["{website}", "website"],
   ["{instagram}", "Instagram"],
@@ -64,6 +65,7 @@ type Vars = {
   total?: string;
   payment?: string;
   link?: string;
+  stall?: string;
 };
 
 export function render(template: string, v: Vars): string {
@@ -73,6 +75,7 @@ export function render(template: string, v: Vars): string {
     total: v.total ?? "",
     payment: v.payment ?? "",
     link: v.link ?? "",
+    stall: v.stall ?? "",
     business: BUSINESS.name,
     website: BUSINESS.website,
     instagram: BUSINESS.instagram,
@@ -83,7 +86,8 @@ export function render(template: string, v: Vars): string {
       const used = [...line.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
       // A line that leans on a value we don't have says nothing useful.
       return !used.some(
-        (k) => (k === "link" || k === "instagram") && !values[k],
+        (k) =>
+          (k === "link" || k === "instagram" || k === "stall") && !values[k],
       );
     })
     .join("\n")
@@ -100,6 +104,7 @@ export function receiptText(
     bill: sale.invoiceNo,
     total: inr(sale.total),
     payment: sale.paymentMode,
+    stall: sale.stall?.name,
     link,
   });
 }
