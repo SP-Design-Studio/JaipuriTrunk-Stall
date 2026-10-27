@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import type { Catalog } from "@/lib/catalog";
+import type { StallEntry } from "@/lib/types";
 import { itemsToCsv, salesToCsv } from "@/lib/csv";
 import { download } from "@/lib/download";
 import { itemRows } from "@/lib/report";
@@ -16,6 +18,7 @@ import {
 import type { Sale } from "@/lib/types";
 import ExportBills from "./ExportBills";
 import { useToast } from "./Toasts";
+import StockBadge from "./StockBadge";
 import VerifyBill from "./VerifyBill";
 
 const tab = (on: boolean) =>
@@ -29,17 +32,25 @@ export default function Sales({
   sales,
   templates,
   currentStall,
+  stalls,
+  catalog,
+  stock,
   onOpen,
 }: {
   sales: Sale[];
   templates: Templates | null;
   /** The stall bills are being recorded against now, if one has been started. */
   currentStall?: string;
+  /** Every stall in the list, so ones with no bills yet are still shown. */
+  stalls: StallEntry[];
+  /** The item list and stock counts, for the Stock tab. */
+  catalog: Catalog | null;
+  stock: Record<string, number> | null;
   onOpen: (sale: Sale) => void;
 }) {
   const [range, setRange] = useState<"today" | "all">("today");
   const [view, setView] = useState<
-    "log" | "sold" | "days" | "stalls" | "people"
+    "log" | "sold" | "days" | "stalls" | "stock" | "people"
   >("log");
   const [verifying, setVerifying] = useState(false);
   const [stallFilter, setStallFilter] = useState("all");
@@ -54,11 +65,14 @@ export default function Sales({
   // The dropdown lists every stall that has bills, and the current one even
   // before its first bill, so choosing "This stall" always has an entry.
   const stallOptions = useMemo(
-    () =>
-      currentStall && !stallNames.includes(currentStall)
-        ? [currentStall, ...stallNames]
-        : stallNames,
-    [stallNames, currentStall],
+    () => [
+      ...new Set([
+        ...stalls.map((x) => x.name),
+        ...stallNames,
+        ...(currentStall ? [currentStall] : []),
+      ]),
+    ],
+    [stalls, stallNames, currentStall],
   );
   const shown = useMemo(
     () =>
@@ -149,8 +163,49 @@ export default function Sales({
       else r.cash += s.total;
       by.set(name, r);
     }
+    // Stalls in the list with no bills yet still get a row (of zeros).
+    for (const st of stalls)
+      if (!by.has(st.name)) {
+        const when = `${st.from ?? "1970-01-01"}T00:00:00.000Z`;
+        by.set(st.name, {
+          name: st.name,
+          first: when,
+          last: when,
+          planned: st.from ? { from: st.from, to: st.to } : undefined,
+          days: new Set<string>(),
+          bills: 0,
+          units: 0,
+          upi: 0,
+          cash: 0,
+          discount: 0,
+          total: 0,
+        });
+      }
     return [...by.values()].sort((a, b) => b.last.localeCompare(a.last));
-  }, [sales]);
+  }, [sales, stalls]);
+
+  /** Counted items with what is left and what sold in the current list. */
+  const stockRows = useMemo(() => {
+    if (!catalog || !stock) return [];
+    const sold = new Map<string, number>();
+    for (const s of shown)
+      for (const l of s.lines)
+        if (l.itemId) sold.set(l.itemId, (sold.get(l.itemId) ?? 0) + l.qty);
+    return catalog.categories
+      .flatMap((c) =>
+        c.items
+          .filter((i) => stock[i.id] !== undefined)
+          .map((i) => ({
+            id: i.id,
+            name: i.name,
+            category: c.title,
+            left: stock[i.id],
+            sold: sold.get(i.id) ?? 0,
+          })),
+      )
+      .sort((a, b) => a.left - b.left || a.name.localeCompare(b.name));
+  }, [catalog, stock, shown]);
+  const needAttention = stockRows.filter((r) => r.left <= 3).length;
 
   /** One row per day in the list, newest first, for the books. */
   const days = useMemo(() => {
@@ -322,6 +377,17 @@ export default function Sales({
             What sold
           </button>
           <button
+            onClick={() => setView("stock")}
+            className={tab(view === "stock")}
+          >
+            Stock
+            {needAttention > 0 && (
+              <span className="ml-2 bg-amber-400 px-1.5 text-xs font-semibold text-amber-950">
+                {needAttention} low
+              </span>
+            )}
+          </button>
+          <button
             onClick={() => setView("stalls")}
             className={tab(view === "stalls")}
           >
@@ -490,6 +556,52 @@ export default function Sales({
             </>
           ))}
 
+        {view === "stock" &&
+          (stockRows.length === 0 ? (
+            empty(
+              "No items are being counted yet. Type a stock number next to an item on the Items tab.",
+            )
+          ) : (
+            <>
+              <div className="border-maroon/15 overflow-x-auto border bg-white/50">
+                <table className="w-full min-w-[34rem] text-left text-sm">
+                  <thead className="text-olive/80 border-maroon/15 border-b text-xs tracking-[0.14em] uppercase">
+                    <tr>
+                      <th className="px-4 py-3 font-normal">Item</th>
+                      <th className="px-4 py-3 font-normal">Category</th>
+                      <th className="px-4 py-3 text-right font-normal">
+                        In stock
+                      </th>
+                      <th className="px-4 py-3 text-right font-normal">
+                        Sold (this list)
+                      </th>
+                      <th className="px-4 py-3 font-normal">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-maroon/10 divide-y">
+                    {stockRows.map((r) => (
+                      <tr key={r.id}>
+                        <td className="px-4 py-3 font-semibold">{r.name}</td>
+                        <td className="text-ink/60 px-4 py-3">{r.category}</td>
+                        <td className="px-4 py-3 text-right">{r.left}</td>
+                        <td className="px-4 py-3 text-right">{r.sold}</td>
+                        <td className="px-4 py-3">
+                          <StockBadge left={r.left} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-ink/50 text-xs">
+                {stockRows.length} counted item
+                {stockRows.length === 1 ? "" : "s"}, lowest stock first. “Sold”
+                follows the Today / stall filter above and counts bills made
+                since stock tracking began. Change a number on the Items tab.
+              </p>
+            </>
+          ))}
+
         {view === "stalls" &&
           (stallRows.length === 0 ? (
             empty("No bills yet.")
@@ -548,7 +660,9 @@ export default function Sales({
                                   : ""
                               }`}
                           <span className="text-ink/45 block text-xs">
-                            {r.days.size} day{r.days.size === 1 ? "" : "s"}
+                            {r.bills === 0
+                              ? "no bills yet"
+                              : `${r.days.size} day${r.days.size === 1 ? "" : "s"}`}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right">{r.bills}</td>

@@ -14,6 +14,7 @@ import Sales from "./Sales";
 import { ToastProvider, useToast } from "./Toasts";
 import { useCatalog } from "./useCatalog";
 import { useStalls } from "./useStalls";
+import { useStock } from "./useStock";
 import { useSales, type SaveResult } from "./useSales";
 
 function Gate({
@@ -55,6 +56,7 @@ function PosScreen() {
   const qr = useUpiQr();
   const templates = useTemplates();
   const stallList = useStalls();
+  const stockApi = useStock();
   const [view, setView] = useState<"register" | "sales" | "items" | "settings">(
     "register",
   );
@@ -70,6 +72,8 @@ function PosScreen() {
     if (result.status === "saved") {
       setReceipt({ sale: result.sale, fresh: true });
       toast.success(`Sale saved · ${result.sale.invoiceNo}`);
+      // The server has lowered the counts; pick up the new numbers.
+      void stockApi.refresh();
     } else {
       toast.error(`Sale not saved: ${result.message}`);
     }
@@ -110,6 +114,7 @@ function PosScreen() {
     const stored = list.find((s) => s.id === sale.id);
     if (stored) {
       setReceipt({ sale: stored, fresh: true });
+      void stockApi.refresh();
       return "saved";
     }
     return "missing";
@@ -192,13 +197,22 @@ function PosScreen() {
 
   return (
     <div className="bg-cream text-ink fixed inset-0 flex flex-col overflow-clip">
-      <header className="bg-maroon-deep text-petal flex flex-wrap items-center justify-between gap-x-3 px-3 py-1 sm:flex-nowrap sm:px-4 sm:py-2">
-        <div className="flex items-center gap-3">
+      <header className="bg-maroon-deep text-petal flex flex-wrap items-center justify-between gap-x-3 px-3 py-1 sm:grid sm:grid-cols-[1fr_auto_1fr] sm:px-4 sm:py-2">
+        {/* Three equal-weight columns on wider screens, so the menu sits in the
+            exact middle whatever the widths of the name and the status on either side. */}
+        <div className="flex min-w-0 items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/images/logo.png" alt="" className="size-9" />
-          <span className="font-display text-base tracking-wide sm:text-lg">
-            {BUSINESS.name}
-          </span>
+          <img
+            src="/images/monogram-orange.png"
+            alt=""
+            className="h-9 w-auto sm:h-11"
+          />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/images/wordmark-orange.png"
+            alt={BUSINESS.name}
+            className="h-5 w-auto sm:h-6"
+          />
           {stall ? (
             <button
               onClick={() => setView("settings")}
@@ -223,7 +237,7 @@ function PosScreen() {
         </div>
 
         <nav
-          className="order-last flex w-full sm:order-none sm:w-auto"
+          className="order-last flex w-full sm:order-none sm:w-auto sm:justify-self-center"
           aria-label="Sections"
         >
           <button
@@ -236,6 +250,7 @@ function PosScreen() {
             onClick={() => {
               setView("sales");
               void refresh();
+              void stockApi.refresh();
             }}
             className={nav(view === "sales")}
           >
@@ -255,7 +270,7 @@ function PosScreen() {
           </button>
         </nav>
 
-        <div className="flex items-center gap-1 sm:gap-3">
+        <div className="flex items-center gap-1 sm:justify-self-end sm:gap-3">
           <button
             onClick={() =>
               items.save.kind === "failed" ? items.retry() : void refresh()
@@ -304,6 +319,7 @@ function PosScreen() {
           key={till}
           catalog={items.catalog}
           qr={qr.image}
+          stock={stockApi.stock}
           stall={
             stall
               ? {
@@ -324,6 +340,9 @@ function PosScreen() {
           sales={sales}
           templates={templates.saved}
           currentStall={stall?.name}
+          stalls={stallList.stalls ?? []}
+          catalog={items.catalog}
+          stock={stockApi.stock}
           onOpen={(sale) => setReceipt({ sale, fresh: false })}
         />
       )}
@@ -333,6 +352,8 @@ function PosScreen() {
           status={items.save}
           onChange={items.update}
           onRetry={items.retry}
+          stock={stockApi.stock}
+          onStock={(id, q) => void stockApi.set(id, q)}
         />
       )}
       {view === "settings" && (

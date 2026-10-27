@@ -24,6 +24,7 @@ type Data = {
   sales: Sale[];
   catalog: { catalog: Catalog; updatedAt: string } | null;
   settings?: Record<string, unknown>;
+  stock?: Record<string, number>;
 };
 
 async function load(): Promise<Data> {
@@ -39,10 +40,12 @@ async function load(): Promise<Data> {
 const save = (d: Data) =>
   writeFile(/*turbopackIgnore: true*/ FILE, JSON.stringify(d, null, 2));
 
-export async function insertSale(sale: Sale): Promise<Sale | "busy"> {
+export async function insertSale(
+  sale: Sale,
+): Promise<{ sale: Sale; created: boolean } | "busy"> {
   const d = await load();
   const seen = d.sales.find((s) => s.id === sale.id);
-  if (seen) return seen;
+  if (seen) return { sale: seen, created: false };
   const last = d.sales.reduce((n, s) => Math.max(n, seqOf(s.invoiceNo)), 0);
   const numbered = {
     ...sale,
@@ -50,7 +53,7 @@ export async function insertSale(sale: Sale): Promise<Sale | "busy"> {
   };
   d.sales.push(numbered);
   await save(d);
-  return numbered;
+  return { sale: numbered, created: true };
 }
 
 export async function findSale(id: string): Promise<Sale | null> {
@@ -110,5 +113,32 @@ export async function putSetting(id: string, data: unknown): Promise<void> {
 export async function deleteSetting(id: string): Promise<void> {
   const d = await load();
   if (d.settings) delete d.settings[id];
+  await save(d);
+}
+
+export async function getStock(): Promise<Record<string, number>> {
+  return { ...(await load()).stock };
+}
+
+export async function setStock(
+  itemId: string,
+  quantity: number | null,
+): Promise<void> {
+  const d = await load();
+  const stock = { ...d.stock };
+  if (quantity === null) delete stock[itemId];
+  else stock[itemId] = quantity;
+  d.stock = stock;
+  await save(d);
+}
+
+export async function consumeStock(
+  taken: Record<string, number>,
+): Promise<void> {
+  const d = await load();
+  const stock = { ...d.stock };
+  for (const [id, qty] of Object.entries(taken))
+    if (id in stock) stock[id] = Math.max(stock[id] - qty, 0);
+  d.stock = stock;
   await save(d);
 }

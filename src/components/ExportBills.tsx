@@ -73,7 +73,8 @@ export default function ExportBills({
         shots.push(
           await html2canvas(el, {
             scale: 2,
-            backgroundColor: "#fdf6ea",
+            // Transparent, so the torn edges stay clear; the page sheet below is white.
+            backgroundColor: null,
             logging: false,
           }),
         );

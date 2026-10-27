@@ -33,6 +33,10 @@ export const putSetting = (id: string, data: unknown) =>
 export const deleteSetting = (id: string) => via().deleteSetting(id);
 export const restoreSale = (s: Sale) => via().restoreSale(s);
 export const deleteAllSales = () => via().deleteAllSales();
+export const getStock = () => via().getStock();
+export const setStock = (id: string, q: number | null) => via().setStock(id, q);
+export const consumeStock = (t: Record<string, number>) =>
+  via().consumeStock(t);
 export const findSale = (id: string) => via().findSale(id);
 export const findByInvoice = (n: string) => via().findByInvoice(n);
 export const listSales = (limit?: number) => via().listSales(limit);

@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { noStore, requestHasSession, sameOrigin } from "@/lib/guard";
 import { passwordMatches } from "@/lib/session";
-import { available, deleteAllSales, insertSale, listSales } from "@/lib/store";
+import {
+  available,
+  consumeStock,
+  deleteAllSales,
+  insertSale,
+  listSales,
+} from "@/lib/store";
 import { withProof } from "@/lib/receiptlink";
 import { parseSale } from "@/lib/validate";
 
@@ -93,9 +99,24 @@ export async function POST(request: Request) {
         { status: 409, headers: noStore },
       );
     }
+    // Stock goes down once, for a sale that was just created: a retry of one
+    // already stored must not take the pieces off twice. The sale is already
+    // saved, so a stock problem (say the stock table isn't set up yet) is
+    // logged and never turns into a failed sale.
+    if (stored.created) {
+      const taken: Record<string, number> = {};
+      for (const l of stored.sale.lines)
+        if (l.itemId) taken[l.itemId] = (taken[l.itemId] ?? 0) + l.qty;
+      if (Object.keys(taken).length > 0)
+        try {
+          await consumeStock(taken);
+        } catch (err) {
+          console.error("[stall] could not lower stock:", err);
+        }
+    }
     // The stored sale, not the one sent: it carries the bill number.
     return NextResponse.json(
-      { ok: true, sale: withProof(stored) },
+      { ok: true, sale: withProof(stored.sale) },
       { headers: noStore },
     );
   } catch (err) {

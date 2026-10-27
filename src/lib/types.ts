@@ -15,6 +15,9 @@ export type Line = {
   qty: number;
   size?: string;
   color?: string;
+  /** The catalogue item it came from, so selling it can lower that item's stock.
+   *  Absent on one-off "other item" lines and on bills from before stock. */
+  itemId?: string;
 };
 
 export type Discount =

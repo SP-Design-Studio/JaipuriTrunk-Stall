@@ -104,8 +104,8 @@ This is a note for the owner, not legal advice; confirm with your CA.
 - Items tab: each item has a photo box. Pictures are shrunk on the iPad to the
   register tile (360 px square), stored in the database and served by
   `/api/item-image/<id>`; removing the item removes its photo.
-- Colours are the logo's: maroon `#7f1634`, orange `#f99a58`, peach `#f2b77e`.
-  The logo is `public/images/logo.png` (and the app icon in `src/app`).
+- Colours are the logo's: maroon `#762136` (RGB 118, 33, 54), orange `#f49b49`.
+  Logos in `public/images`: `monogram-orange.png` + `wordmark-orange.png` (dark header), `monogram-black.png` + `wordmark-black.png` (receipt, prints well in black and white), `logo-orange.png` (full monogram + name, transparent) and `logo.png` (the same on maroon; also the app icon in `src/app`).
 - A customer name is required on every bill.
 - WhatsApp opens through `whatsapp://` (straight into the app, no web page); a
   small "use the web link" fallback sits under it.
@@ -126,3 +126,14 @@ This is a note for the owner, not legal advice; confirm with your CA.
   stall dropdown shows any past one, "By day" gives a per-day UPI/cash/discount/
   total table for the books, and the CSVs, PDF and backup carry the stall.
   **Run migration `0003_add_stall_to_sales.sql` first**: it adds the `stall` column.
+- Stock: on the Items tab type a stock number next to an item (empty = not
+  counted). The register tile shows "N left" / "Only N left" / "Sold out" and
+  won't let more than the stock onto a bill; saving a bill lowers the count on
+  the server, once per bill (a retried upload doesn't count twice) and never below
+  zero. Sales → Stock lists counted items, lowest first, with what sold in the
+  current list. Counts are per item, not per size or colour. Stock is kept in its
+  own table: **run migration `0004_add_stock.sql` first**. Until it is run, selling
+  still works; stock just isn't shown or counted.
+- Receipts have torn, printer-feed edges top and bottom (a row of small teeth drawn
+  as an SVG strip in `Receipt.tsx`; `TOOTH` / `TOOTH_H` set their size). The capture
+  keeps the corners transparent and lays the PNG, PDF and print pages on white.

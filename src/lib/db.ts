@@ -81,9 +81,11 @@ const MAX_TRIES = 8;
  * other sees the 409, reads again and takes the next number. Only if that keeps
  * failing does the till hear about it ("busy").
  */
-export async function insertSale(sale: Sale): Promise<Sale | "busy"> {
+export async function insertSale(
+  sale: Sale,
+): Promise<{ sale: Sale; created: boolean } | "busy"> {
   const existing = await findSale(sale.id);
-  if (existing) return existing;
+  if (existing) return { sale: existing, created: false };
 
   for (let i = 0; i < MAX_TRIES; i++) {
     const res = await fetch(
@@ -106,13 +108,13 @@ export async function insertSale(sale: Sale): Promise<Sale | "busy"> {
       headers: { ...headers(), prefer: "return=minimal" },
       body: JSON.stringify(toRow(numbered)),
     });
-    if (put.ok) return numbered;
+    if (put.ok) return { sale: numbered, created: true };
     const detail = await put.text();
     if (put.status !== 409 && !detail.includes('"23505"'))
       throw new Error(`supabase responded ${put.status}: ${detail}`);
     // Either the same sale arrived twice at once, or the number was taken.
     const again = await findSale(sale.id);
-    if (again) return again;
+    if (again) return { sale: again, created: false };
   }
   return "busy";
 }
@@ -257,4 +259,65 @@ export async function deleteSetting(id: string): Promise<void> {
   );
   if (!res.ok)
     throw new Error(`supabase responded ${res.status}: ${await res.text()}`);
+}
+
+/**
+ * Stock: one row per item that has a count (stall_stock, migration 0004). Items
+ * with no row are simply not tracked. If the migration hasn't been run these
+ * throw; callers treat stock as optional so selling never depends on it.
+ */
+export async function getStock(): Promise<Record<string, number>> {
+  const res = await fetch(
+    `${base()}/rest/v1/stall_stock?select=item_id,quantity`,
+    {
+      headers: headers(),
+      cache: "no-store",
+    },
+  );
+  if (!res.ok)
+    throw new Error(`supabase responded ${res.status}: ${await res.text()}`);
+  const rows = (await res.json()) as { item_id: string; quantity: number }[];
+  return Object.fromEntries(rows.map((r) => [r.item_id, r.quantity]));
+}
+
+/** Sets an item's count, or stops tracking it with null. */
+export async function setStock(
+  itemId: string,
+  quantity: number | null,
+): Promise<void> {
+  const res =
+    quantity === null
+      ? await fetch(
+          `${base()}/rest/v1/stall_stock?item_id=eq.${encodeURIComponent(itemId)}`,
+          { method: "DELETE", headers: headers() },
+        )
+      : await fetch(`${base()}/rest/v1/stall_stock`, {
+          method: "POST",
+          headers: {
+            ...headers(),
+            prefer: "resolution=merge-duplicates,return=minimal",
+          },
+          body: JSON.stringify({
+            item_id: itemId,
+            quantity,
+            updated_at: new Date().toISOString(),
+          }),
+        });
+  if (!res.ok)
+    throw new Error(`supabase responded ${res.status}: ${await res.text()}`);
+}
+
+/** Lowers counts for what just sold: per item, in one database step each. */
+export async function consumeStock(
+  taken: Record<string, number>,
+): Promise<void> {
+  for (const [itemId, qty] of Object.entries(taken)) {
+    const res = await fetch(`${base()}/rest/v1/rpc/stall_decrement_stock`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ p_item: itemId, p_qty: qty }),
+    });
+    if (!res.ok)
+      throw new Error(`supabase responded ${res.status}: ${await res.text()}`);
+  }
 }

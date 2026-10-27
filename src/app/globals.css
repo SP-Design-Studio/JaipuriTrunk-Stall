@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
-/* The brand palette, taken from the logo: its deep maroon ground, the orange of
-   the key and the peach of the wordmark. The names are kept from the site's
+/* The brand palette, taken from the logo: its deep maroon ground, RGB(118, 33, 54) = #762136 and
+   the one orange (#f49b49) the key and the wordmark are drawn in. The names are kept from the site's
    tokens (olive is now the burnt orange used for secondary text and borders). */
 @theme {
-  --color-maroon: #7f1634;
-  --color-maroon-deep: #5a0f25;
+  --color-maroon: #762136;
+  --color-maroon-deep: #531726;
   --color-rose: #c4566e;
   --color-blush: #f7cfa8;
   --color-petal: #f9e6d6;
-  --color-sage: #f2b77e;
+  --color-sage: #f49b49;
   --color-olive: #b0541a;
   --color-olive-deep: #7d3a10;
   --color-sand: #e3c3a0;

@@ -37,6 +37,11 @@ function parseLine(v: unknown): Line | null {
   if (!int(v.price, 1, 1_000_000) || !int(v.qty, 1, 99)) return null;
   if (v.size !== undefined && !text(v.size, 20)) return null;
   if (v.color !== undefined && !text(v.color, 20)) return null;
+  if (
+    v.itemId !== undefined &&
+    (typeof v.itemId !== "string" || !ID.test(v.itemId))
+  )
+    return null;
   return {
     key: v.key,
     name: v.name.trim(),
@@ -44,6 +49,7 @@ function parseLine(v: unknown): Line | null {
     qty: v.qty,
     ...(typeof v.size === "string" && v.size ? { size: v.size } : {}),
     ...(typeof v.color === "string" && v.color ? { color: v.color } : {}),
+    ...(typeof v.itemId === "string" ? { itemId: v.itemId } : {}),
   };
 }
 

@@ -6,6 +6,8 @@ import { tilesOf, type Catalog, type Tile } from "@/lib/catalog";
 import { inr, lineTotal, totalsFor } from "@/lib/money";
 import type { Discount, Line, PaymentMode, Sale, Stall } from "@/lib/types";
 import Modal from "./Modal";
+import StockBadge from "./StockBadge";
+import { useToast } from "./Toasts";
 import type { SaveResult } from "./useSales";
 
 const input =
@@ -26,6 +28,7 @@ const wholeRupees = (raw: string) => {
 export default function Register({
   catalog,
   qr,
+  stock,
   stall,
   onSave,
   onCheck,
@@ -33,6 +36,8 @@ export default function Register({
   catalog: Catalog;
   /** Where this till is today; printed on the receipt and saved with the bill. */
   stall?: Stall;
+  /** Pieces in stock per item id; null if stock cannot be read. Items not listed are not counted. */
+  stock: Record<string, number> | null;
   /** The uploaded UPI QR: undefined while loading, null if none yet. */
   qr: string | null | undefined;
   /** Resolves once the database has answered. The receipt opens only on "saved". */
@@ -44,6 +49,7 @@ export default function Register({
   const [discount, setDiscount] = useState<Discount>({ kind: "none" });
   const [flatText, setFlatText] = useState("");
   const [mode, setMode] = useState<PaymentMode>("UPI");
+  const toast = useToast();
   const [qrOpen, setQrOpen] = useState(false);
   /** Phones only: the bill is a full-screen sheet over the items. */
   const [billOpen, setBillOpen] = useState(false);
@@ -105,7 +111,30 @@ export default function Register({
 
   type Variant = { size?: string; color?: string };
 
-  function addLine(name: string, price: number, v: Variant = {}) {
+  /** How many of an item are already on this bill (all sizes and colours). */
+  const inBill = (itemId?: string) =>
+    itemId
+      ? lines.reduce((n, l) => (l.itemId === itemId ? n + l.qty : n), 0)
+      : 0;
+
+  /** Whether one more of this item can go on the bill; says so if not. */
+  function haveStock(itemId?: string): boolean {
+    const have = itemId ? stock?.[itemId] : undefined;
+    if (have === undefined || !itemId) return true;
+    if (inBill(itemId) < have) return true;
+    toast.warning(
+      have === 0 ? "That item is sold out." : `Only ${have} in stock.`,
+    );
+    return false;
+  }
+
+  function addLine(
+    name: string,
+    price: number,
+    v: Variant = {},
+    itemId?: string,
+  ) {
+    if (!haveStock(itemId)) return;
     const key = `${name}|${v.size ?? ""}|${v.color ?? ""}|${price}`;
     setLines((cur) => {
       const hit = cur.find((l) => l.key === key);
@@ -122,6 +151,7 @@ export default function Register({
           qty: 1,
           ...(v.size ? { size: v.size } : {}),
           ...(v.color ? { color: v.color } : {}),
+          ...(itemId ? { itemId } : {}),
         },
       ];
     });
@@ -137,10 +167,12 @@ export default function Register({
       setPriceText("");
       return setPriceFor({ item, ...v });
     }
-    addLine(item.name, item.price, v);
+    addLine(item.name, item.price, v, item.id);
   }
 
   function setQty(key: string, delta: number) {
+    if (delta > 0 && !haveStock(lines.find((l) => l.key === key)?.itemId))
+      return;
     setLines((cur) =>
       cur
         .map((l) =>
@@ -272,7 +304,11 @@ export default function Register({
             <button
               key={item.id}
               onClick={() => pick(item)}
-              className="border-maroon/15 hover:border-maroon/50 active:bg-petal flex flex-col border bg-white/50 text-left transition-colors"
+              disabled={
+                stock?.[item.id] !== undefined &&
+                stock[item.id] - inBill(item.id) <= 0
+              }
+              className="border-maroon/15 hover:border-maroon/50 active:bg-petal flex flex-col border bg-white/50 text-left transition-colors disabled:opacity-50"
             >
               <div className="bg-petal/50 relative aspect-square w-full">
                 {item.src?.startsWith("/api/") ? (
@@ -299,8 +335,14 @@ export default function Register({
               </div>
               <div className="p-2.5">
                 <div className="text-ink text-sm leading-snug">{item.name}</div>
-                <div className="text-maroon mt-0.5 text-sm font-semibold">
-                  {item.price === null ? "Set price" : inr(item.price)}
+                {/* Price on the left, stock on the right, both easy to read. */}
+                <div className="mt-1.5 flex items-center justify-between gap-2">
+                  <span className="text-maroon text-lg leading-none font-bold">
+                    {item.price === null ? "Set price" : inr(item.price)}
+                  </span>
+                  {stock?.[item.id] !== undefined && (
+                    <StockBadge left={stock[item.id] - inBill(item.id)} />
+                  )}
                 </div>
               </div>
             </button>
@@ -647,10 +689,12 @@ export default function Register({
             onClick={() => {
               const price = wholeRupees(priceText);
               if (!price) return;
-              addLine(priceFor.item.name, price, {
-                size: priceFor.size,
-                color: priceFor.color,
-              });
+              addLine(
+                priceFor.item.name,
+                price,
+                { size: priceFor.size, color: priceFor.color },
+                priceFor.item.id,
+              );
               setPriceFor(null);
             }}
             disabled={!wholeRupees(priceText)}

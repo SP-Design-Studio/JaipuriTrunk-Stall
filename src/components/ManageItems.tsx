@@ -79,8 +79,14 @@ export default function ManageItems({
   status,
   onChange,
   onRetry,
+  stock,
+  onStock,
 }: {
   catalog: Catalog;
+  /** Pieces in stock per item id; an item with no entry is not counted. */
+  stock: Record<string, number> | null;
+  /** Set an item's count, or null to stop counting it. */
+  onStock: (itemId: string, quantity: number | null) => void;
   status: SaveState;
   onChange: (next: Catalog) => void;
   onRetry: () => void;
@@ -168,8 +174,9 @@ export default function ManageItems({
       });
       toast.info("Category removed.");
     } else {
-      // A removed item's uploaded photo goes with it.
+      // A removed item's uploaded photo and stock count go with it.
       void deleteItemPhoto(ask.itemId);
+      if (stock?.[ask.itemId] !== undefined) onStock(ask.itemId, null);
       onChange({
         categories: catalog.categories.map((c) =>
           c.id === ask.catId
@@ -196,10 +203,11 @@ export default function ManageItems({
       <div className="mx-auto max-w-3xl space-y-5 pb-10">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-ink/60 text-sm">
-            Prices left empty are asked for at the till. A category with sizes
-            or colours asks for them when an item is tapped. Removing something
-            only changes what the register offers; past receipts keep what they
-            sold for.
+            Prices left empty are asked for at the till. Type a stock number to
+            count an item down as it sells; leave it empty to not count it. A
+            category with sizes or colours asks for them when an item is tapped.
+            Removing something only changes what the register offers; past
+            receipts keep what they sold for.
           </p>
           {status.kind === "failed" ? (
             <span role="alert" className="text-maroon text-xs font-semibold">
@@ -335,6 +343,26 @@ export default function ManageItems({
                         });
                       }}
                       className={`${box} pl-7`}
+                    />
+                  </div>
+                  <div className="w-24 shrink-0">
+                    <Field
+                      key={`s:${stock?.[i.id] ?? "none"}`}
+                      value={
+                        stock?.[i.id] === undefined ? "" : String(stock[i.id])
+                      }
+                      digitsOnly
+                      inputMode="numeric"
+                      placeholder="Stock"
+                      aria-label={`Stock of ${i.name}`}
+                      onCommit={(v) => {
+                        const t = v.trim();
+                        const next = t === "" ? null : Number(t);
+                        // Only send a real change.
+                        if (next !== (stock?.[i.id] ?? null))
+                          onStock(i.id, next);
+                      }}
+                      className={box}
                     />
                   </div>
                   <button

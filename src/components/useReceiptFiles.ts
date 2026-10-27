@@ -23,11 +23,23 @@ export function useReceiptFiles(sale: Sale) {
       await document.fonts?.ready;
       const html2canvas = (await import("html2canvas")).default;
       if (cancelled || !ref.current) return;
-      const canvas = await html2canvas(ref.current, {
+      const shot = await html2canvas(ref.current, {
         scale: 2,
-        backgroundColor: "#fdf6ea",
+        // Transparent: the torn edges are cut out of the slip, so the corners
+        // must stay clear. It is laid on white below.
+        backgroundColor: null,
         logging: false,
       });
+      // On white, so the PNG and the PDF look the same in any viewer or chat
+      // (a transparent PNG shows up black in some of them).
+      const canvas = document.createElement("canvas");
+      canvas.width = shot.width;
+      canvas.height = shot.height;
+      const g = canvas.getContext("2d");
+      if (!g) throw new Error("no canvas");
+      g.fillStyle = "#ffffff";
+      g.fillRect(0, 0, canvas.width, canvas.height);
+      g.drawImage(shot, 0, 0);
       const toBlob = (type: string, quality?: number) =>
         new Promise<Blob>((resolve, reject) =>
           canvas.toBlob(

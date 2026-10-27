@@ -88,7 +88,7 @@ export default function Settings({
           )}
         </section>
 
-        <StallsCard stallList={stallList} className={card} />
+        <StallsCard stallList={stallList} sales={sales} className={card} />
 
         <MessageBuilder templates={templates} className={card} />
 
@@ -564,217 +564,337 @@ function BackupCard({
 
 /**
  * The stalls: one for each time the market happens, tracked on its own for the
- * books. Exactly one is "current"; every sale made meanwhile is recorded against
- * it and the receipt prints its name, address and phone. Start a new one when a
- * new month's stall begins, and last month's stays in the list, with its sales,
- * to look back on in Sales.
+ * books. Exactly one is "current"; every bill made meanwhile is recorded against
+ * it and the receipt prints its name, address and phone.
+ *
+ * Every button here does its job straight away and says so (there is no draft and
+ * no separate Save): start a new stall, edit one, make one current, end the
+ * current one, delete one. Past stalls stay in the list, with their bills, to look
+ * back on in Sales.
  */
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
 function StallsCard({
   stallList,
+  sales,
   className,
 }: {
   stallList: ReturnType<typeof useStalls>;
+  sales: Sale[];
   className: string;
 }) {
   const toast = useToast();
-  const [draft, setDraft] = useState<StallEntry[]>(stallList.stalls ?? []);
-  const [current, setCurrent] = useState<string | null>(stallList.currentId);
-  const [adopted, setAdopted] = useState(stallList.stalls !== null);
-  if (!adopted && stallList.stalls) {
-    setAdopted(true);
-    setDraft(stallList.stalls);
-    setCurrent(stallList.currentId);
-  }
+  const stalls = stallList.stalls ?? [];
+  const current = stalls.find((s) => s.id === stallList.currentId);
+  // The stall being created or edited, if the form is open.
+  const [form, setForm] = useState<StallEntry | null>(null);
+  const [isNew, setIsNew] = useState(false);
+  const [showDays, setShowDays] = useState(false);
+  const [removing, setRemoving] = useState<StallEntry | null>(null);
   const [busy, setBusy] = useState(false);
-  const dirty =
-    JSON.stringify([draft, current]) !==
-    JSON.stringify([stallList.stalls ?? [], stallList.currentId]);
 
-  const patch = (id: string, p: Partial<StallEntry>) =>
-    setDraft((d) => d.map((s) => (s.id === id ? { ...s, ...p } : s)));
+  const tally = (name: string) => {
+    const mine = sales.filter((x) => x.stall?.name === name);
+    return { bills: mine.length, total: mine.reduce((n, x) => n + x.total, 0) };
+  };
 
-  async function save() {
-    const names = draft.map((s) => s.name.trim().toLowerCase());
-    if (names.some((n) => !n))
-      return void toast.error("Every stall needs a name.");
-    if (new Set(names).size !== names.length)
-      return void toast.error("Two stalls have the same name.");
-    if (draft.some((s) => !s.from || !s.to))
-      return void toast.error("Pick the day or days each stall runs.");
-    if (draft.some((s) => (s.to ?? "") < (s.from ?? "")))
-      return void toast.error("A stall can’t end before it starts.");
+  /** Writes the whole list, then tells the user what happened. */
+  async function commit(
+    next: StallEntry[],
+    nextCurrent: string | null,
+    done: string,
+  ): Promise<boolean> {
     setBusy(true);
-    const err = await stallList.save(
-      draft.map((s) => ({
-        ...s,
-        name: s.name.trim(),
-        address: s.address.trim(),
-        phone: s.phone.trim(),
-      })),
-      current,
-    );
-    if (err) toast.error(`Stalls not saved: ${err}`);
-    else toast.success("Stalls saved.");
+    const err = await stallList.save(next, nextCurrent);
     setBusy(false);
+    if (err) {
+      toast.error(`Not saved: ${err}`);
+      return false;
+    }
+    toast.success(done);
+    return true;
   }
 
   function startNew() {
-    const id = crypto.randomUUID().slice(0, 8);
     const today = todayKey();
-    setDraft((d) => [
-      { id, name: "", address: "", phone: "", from: today, to: today },
-      ...d,
-    ]);
-    setCurrent(id);
+    setForm({
+      id: crypto.randomUUID().slice(0, 8),
+      name: "",
+      address: "",
+      phone: "",
+      from: today,
+      to: today,
+    });
+    setIsNew(true);
+    setShowDays(false);
+  }
+
+  function edit(s: StallEntry) {
+    setForm({ ...s });
+    setIsNew(false);
+    setShowDays(false);
+  }
+
+  async function submit() {
+    if (!form) return;
+    const name = form.name.trim();
+    if (!name) return void toast.error("Give the stall a name.");
+    if (
+      stalls.some(
+        (x) => x.id !== form.id && x.name.toLowerCase() === name.toLowerCase(),
+      )
+    )
+      return void toast.error("Another stall already has that name.");
+    const entry = {
+      ...form,
+      name,
+      address: form.address.trim(),
+      phone: form.phone.trim(),
+    };
+    const next = isNew
+      ? [entry, ...stalls]
+      : stalls.map((x) => (x.id === entry.id ? entry : x));
+    const ok = await commit(
+      next,
+      isNew ? entry.id : stallList.currentId,
+      isNew ? `${name} started. New bills go to it.` : "Stall saved.",
+    );
+    if (ok) setForm(null);
   }
 
   const field =
     "border-maroon/30 bg-white/70 min-h-11 w-full border px-3 text-base";
-  const now = draft.find((s) => s.id === current);
+  const btn = "min-h-11 border px-4 text-sm font-semibold";
+  const outline = `${btn} border-maroon/30 text-maroon hover:bg-petal`;
 
   return (
     <section className={className}>
       <h3 className="font-display text-maroon text-lg">Stalls</h3>
       <p className="text-ink/60 text-sm">
-        Each time the stall happens, start a new one here (for example “November
-        2026 — Lamakaan”). Every bill is recorded against the current stall and
-        its name, address and phone are printed on the receipt. Past stalls stay
-        in the list and in Sales, so each one can be totalled and printed on its
-        own.
+        Each time the stall happens, start a new one (for example “November 2026
+        — Lamakaan”). Bills are recorded against the current stall, and its
+        name, address and days are printed on the receipt.
       </p>
 
-      {(() => {
-        const saved = (stallList.stalls ?? []).find(
-          (x) => x.id === stallList.currentId,
-        );
-        return (
-          <div
-            className={`p-3 text-sm ${saved ? "bg-emerald-50 text-emerald-900" : "bg-amber-100 text-amber-950"}`}
-            role="status"
-          >
-            {saved ? (
-              <>
-                Current stall: <strong>{saved.name}</strong>
-                {saved.from ? ` · ${prettyRange(saved.from, saved.to)}` : ""}.
-                New bills go to it.
-              </>
-            ) : (stallList.stalls?.length ?? 0) > 0 ? (
-              <>
-                No stall is current, so new bills aren’t recorded against any.
-                Make one current and save.
-              </>
-            ) : (
-              <>
-                No stall started yet. Bills are saved without one and receipts
-                show the shop address.
-              </>
-            )}
+      {/* The current stall, front and centre. */}
+      {current ? (
+        <div className="space-y-2 border border-emerald-700 bg-emerald-50 p-3">
+          <div className="text-xs font-semibold tracking-[0.14em] text-emerald-800 uppercase">
+            ✓ Current stall
           </div>
-        );
-      })()}
-      {dirty && (
-        <div
-          role="alert"
-          className="border border-amber-500 bg-amber-100 p-3 text-sm text-amber-950"
-        >
-          <strong>Not saved yet.</strong> Your changes
-          {now ? ` (“${now.name || "new stall"}” as current)` : ""} only take
-          effect after you tap <strong>Save stalls</strong> below.
+          <div className="font-display text-maroon text-xl">{current.name}</div>
+          <div className="text-ink/70 text-sm">
+            {current.from ? prettyRange(current.from, current.to) : ""}
+            {current.address ? ` · ${current.address}` : ""}
+          </div>
+          <div className="text-ink/60 text-xs">
+            {plural(tally(current.name).bills, "bill")} ·{" "}
+            {inr(tally(current.name).total)}
+          </div>
+          <div className="flex flex-wrap gap-2 pt-1">
+            <button onClick={() => edit(current)} className={outline}>
+              Edit
+            </button>
+            <button
+              disabled={busy}
+              onClick={() =>
+                void commit(
+                  stalls,
+                  null,
+                  "Stall ended. New bills won’t be recorded against any.",
+                )
+              }
+              className={outline}
+            >
+              End this stall
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-amber-100 p-3 text-sm text-amber-950" role="status">
+          {stalls.length > 0
+            ? "No stall is current, so new bills aren’t recorded against any. Start a new one, or make a past one current."
+            : "No stalls yet. Bills are saved without one, and receipts show the shop address."}
         </div>
       )}
 
       <button
         onClick={startNew}
-        disabled={draft.length >= 20}
-        className="bg-maroon text-cream min-h-11 px-4 text-sm font-semibold disabled:opacity-45"
+        disabled={stalls.length >= 20}
+        className={`${btn} bg-maroon border-maroon text-cream disabled:opacity-45`}
       >
         + Start a new stall
       </button>
 
-      {draft.map((s) => (
-        <div
-          key={s.id}
-          className={`space-y-2 border p-3 ${s.id === current ? "border-emerald-700" : "border-maroon/15"}`}
+      {/* Past stalls: each row carries its own actions. */}
+      {stalls.filter((x) => x.id !== current?.id).length > 0 && (
+        <div>
+          <div className="text-olive/80 mb-1 text-xs tracking-[0.18em] uppercase">
+            Past stalls
+          </div>
+          <ul className="divide-maroon/10 border-maroon/15 divide-y border bg-white/50">
+            {stalls
+              .filter((x) => x.id !== current?.id)
+              .map((x) => {
+                const t = tally(x.name);
+                return (
+                  <li
+                    key={x.id}
+                    className="flex flex-wrap items-center gap-x-3 gap-y-2 p-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-semibold">{x.name}</div>
+                      <div className="text-ink/60 text-xs">
+                        {x.from ? `${prettyRange(x.from, x.to)} · ` : ""}
+                        {plural(t.bills, "bill")} · {inr(t.total)}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        disabled={busy}
+                        onClick={() =>
+                          void commit(
+                            stalls,
+                            x.id,
+                            `${x.name} is now the current stall.`,
+                          )
+                        }
+                        className={outline}
+                      >
+                        Make current
+                      </button>
+                      <button onClick={() => edit(x)} className={outline}>
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => setRemoving(x)}
+                        className="min-h-11 px-2 text-sm text-red-700 underline"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+          </ul>
+        </div>
+      )}
+
+      {/* Start / edit form. The days picker stays folded away until asked for. */}
+      {form && (
+        <Modal
+          title={isNew ? "Start a new stall" : "Edit stall"}
+          onClose={() => setForm(null)}
+          wide
         >
-          <input
-            value={s.name}
-            onChange={(e) => patch(s.id, { name: e.target.value })}
-            maxLength={60}
-            placeholder="Name, e.g. November 2026 — Lamakaan"
-            aria-label="Stall name"
-            className={field}
-          />
-          <input
-            value={s.address}
-            onChange={(e) => patch(s.id, { address: e.target.value })}
-            maxLength={160}
-            placeholder="Venue / address (printed on the receipt)"
-            aria-label="Stall address"
-            className={field}
-          />
-          <input
-            value={s.phone}
-            onChange={(e) => patch(s.id, { phone: e.target.value })}
-            maxLength={30}
-            placeholder="Phone (optional)"
-            aria-label="Stall phone"
-            inputMode="tel"
-            className={field}
-          />
-          <RangeCalendar
-            from={s.from}
-            to={s.to}
-            onChange={(from, to) => patch(s.id, { from, to })}
-          />
-          <p className="text-maroon text-sm font-semibold">
-            {s.from ? prettyRange(s.from, s.to) : "Pick the day or days"}
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            {s.id === current ? (
-              <>
-                <span className="min-h-11 inline-flex items-center bg-emerald-700 px-3 text-sm font-semibold text-white">
-                  ✓ Current
-                </span>
-                <button
-                  onClick={() => setCurrent(null)}
-                  className="border-maroon/30 text-maroon min-h-11 border px-4 text-sm"
-                >
-                  End this stall
-                </button>
-              </>
-            ) : (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submit();
+            }}
+            className="space-y-3"
+          >
+            <input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              maxLength={60}
+              placeholder="Name, e.g. November 2026 — Lamakaan"
+              aria-label="Stall name"
+              autoFocus
+              className={field}
+            />
+            <input
+              value={form.address}
+              onChange={(e) => setForm({ ...form, address: e.target.value })}
+              maxLength={160}
+              placeholder="Venue / address (printed on the receipt)"
+              aria-label="Stall address"
+              className={field}
+            />
+            <input
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              maxLength={30}
+              placeholder="Phone (optional)"
+              aria-label="Stall phone"
+              inputMode="tel"
+              className={field}
+            />
+            <div className="border-maroon/15 flex items-center justify-between gap-2 border bg-white/60 p-3">
+              <div>
+                <div className="text-olive/80 text-xs tracking-[0.14em] uppercase">
+                  Days
+                </div>
+                <div className="text-maroon font-semibold">
+                  {form.from ? prettyRange(form.from, form.to) : "Not set"}
+                </div>
+              </div>
               <button
-                onClick={() => setCurrent(s.id)}
-                className="border-maroon/30 text-maroon min-h-11 border px-4 text-sm font-semibold"
+                type="button"
+                onClick={() => setShowDays((v) => !v)}
+                className={outline}
               >
-                Make current
+                {showDays ? "Done" : "Change days"}
               </button>
+            </div>
+            {showDays && (
+              <RangeCalendar
+                from={form.from}
+                to={form.to}
+                onChange={(from, to) => setForm({ ...form, from, to })}
+              />
             )}
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setForm(null)}
+                className={outline}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={busy || !form.name.trim()}
+                className="bg-maroon text-cream min-h-11 px-4 text-sm font-semibold disabled:opacity-45"
+              >
+                {busy ? "Saving…" : isNew ? "Start stall" : "Save changes"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Deleting asks first. */}
+      {removing && (
+        <Modal title="Delete this stall?" onClose={() => setRemoving(null)}>
+          <p className="text-sm">
+            <strong>{removing.name}</strong> will be removed from the list. Its{" "}
+            {plural(tally(removing.name).bills, "bill")}{" "}
+            {tally(removing.name).bills === 1 ? "is" : "are"} not deleted; they
+            keep the stall they were made at.
+          </p>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button onClick={() => setRemoving(null)} className={outline}>
+              Keep it
+            </button>
             <button
-              onClick={() => {
-                setDraft((d) => d.filter((x) => x.id !== s.id));
-                if (current === s.id) setCurrent(null);
+              disabled={busy}
+              onClick={async () => {
+                const gone = removing;
+                const ok = await commit(
+                  stalls.filter((x) => x.id !== gone.id),
+                  stallList.currentId === gone.id ? null : stallList.currentId,
+                  `${gone.name} deleted.`,
+                );
+                if (ok) setRemoving(null);
               }}
-              aria-label={`Remove ${s.name || "this stall"}`}
-              className="ml-auto min-h-11 px-3 text-sm text-red-700 underline"
+              className="min-h-11 bg-red-700 px-4 text-sm font-semibold text-white hover:bg-red-800"
             >
-              Remove from list
+              Delete stall
             </button>
           </div>
-        </div>
-      ))}
-
-      <button
-        onClick={() => void save()}
-        disabled={busy || !dirty}
-        className="bg-maroon text-cream min-h-11 px-5 text-sm font-semibold disabled:opacity-45"
-      >
-        {busy ? "Saving…" : "Save stalls"}
-      </button>
-      <p className="text-ink/50 text-xs">
-        Removing a stall from the list doesn’t delete its bills; they keep the
-        stall they were made at.
-      </p>
+        </Modal>
+      )}
     </section>
   );
 }
