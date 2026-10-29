@@ -6,6 +6,7 @@ import {
   MAX_TEMPLATE,
   PLACEHOLDERS,
   defaultTemplates,
+  fullTemplates,
   render,
   type Templates,
 } from "@/lib/messages";
@@ -115,23 +116,22 @@ function MessageBuilder({
   templates: ReturnType<typeof useTemplates>;
   className: string;
 }) {
-  const start = templates.saved ?? defaultTemplates();
-  const [draft, setDraft] = useState<Templates>(start);
+  const start = fullTemplates(templates.saved);
+  const [draft, setDraft] = useState<Required<Templates>>(start);
   const [status, setStatus] = useState("");
   const toast = useToast();
   const [busy, setBusy] = useState(false);
-  const [focus, setFocus] = useState<keyof Templates>("receipt");
+  const [focus, setFocus] = useState<keyof Required<Templates>>("receipt");
 
   // Adopt what loads from the database, once, unless editing has begun.
   const [adopted, setAdopted] = useState(templates.saved !== null);
   if (!adopted && templates.saved) {
     setAdopted(true);
-    setDraft(templates.saved);
+    setDraft(fullTemplates(templates.saved));
   }
 
   const dirty =
-    JSON.stringify(draft) !==
-    JSON.stringify(templates.saved ?? defaultTemplates());
+    JSON.stringify(draft) !== JSON.stringify(fullTemplates(templates.saved));
 
   function insert(token: string) {
     setDraft((d) => ({ ...d, [focus]: `${d[focus]}${token}` }));
@@ -158,17 +158,22 @@ function MessageBuilder({
 
   const area =
     "border-maroon/30 bg-white/70 min-h-32 w-full border p-3 text-base leading-relaxed";
-  const preview = (key: keyof Templates) =>
-    render(draft[key], key === "receipt" ? SAMPLE : { name: SAMPLE.name });
+  const preview = (key: keyof Required<Templates>) =>
+    render(
+      draft[key],
+      key === "followUp"
+        ? { name: SAMPLE.name }
+        : { ...SAMPLE, review: SAMPLE.link },
+    );
 
   return (
     <section className={className}>
       <h3 className="font-display text-maroon text-lg">WhatsApp messages</h3>
       <p className="text-ink/60 text-sm">
-        The wording of the two messages. Tap a tag to add it where you last
-        typed; each is replaced with the real detail when the message is made. A
-        line with a {"{link}"} or {"{instagram}"} that has nothing to fill is
-        left out.
+        The wording of the messages. Tap a tag to add it where you last typed;
+        each is replaced with the real detail when the message is made. A line
+        with a {"{link}"} or {"{instagram}"} that has nothing to fill is left
+        out.
       </p>
 
       <div className="flex flex-wrap gap-2">
@@ -187,6 +192,10 @@ function MessageBuilder({
       {(
         [
           ["receipt", "After a sale — sent with the receipt link"],
+          [
+            "reviewAsk",
+            "Ask for a review — the button on a bill, sends their review link",
+          ],
           [
             "followUp",
             "Follow-up — only for customers who said yes to messages",

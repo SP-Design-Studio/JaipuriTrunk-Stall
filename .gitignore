@@ -19,10 +19,8 @@ npm-debug.log*
 .env*
 !.env.example
 
-# Database migrations (supabase/migrations) ARE committed: they are the schema's
-# history and hold no secrets. Anything else SQL-ish stays local.
-/supabase/*
-!/supabase/migrations/
+# The whole supabase folder (migrations, scripts) stays on this machine.
+/supabase/
 
 # vercel
 .vercel
@@ -39,15 +37,4 @@ next-env.d.ts
 DEPLOY.md
 .env.example
 
-supabase/migrations/0001_create_stall_tables.sql
-.gitignore
-.gitignore
-supabase/migrations/0003_add_stall_to_sales.sql
-supabase/migrations/0003_add_stall_to_sales.sql
-supabase/migrations/0002_sales_inserted_at_index.sql
-supabase/migrations/README.md
-supabase/migrations/*
-README.md
-README.md
-README.md
 README.md

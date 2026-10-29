@@ -1,6 +1,6 @@
 import type { Catalog } from "./catalog";
 import { invoiceNoFor, seqOf } from "./time";
-import type { Discount, Line, PaymentMode, Sale, Stall } from "./types";
+import type { Discount, Line, PaymentMode, Review, Sale, Stall } from "./types";
 
 /**
  * Sales live in Supabase, reached over its REST endpoint with the service-role
@@ -320,4 +320,72 @@ export async function consumeStock(
     if (!res.ok)
       throw new Error(`supabase responded ${res.status}: ${await res.text()}`);
   }
+}
+
+/**
+ * Reviews (stall_reviews, migration 0005). The bill's id is the key, so a second
+ * review of the same bill is refused by the database itself. If the migration has
+ * not been run these throw; the receipt page treats that as "no review prompt".
+ */
+type ReviewRow = {
+  sale_id: string;
+  rating: number;
+  comment: string;
+  show_public: boolean;
+  first_name: string;
+  invoice_no: string;
+  stall_name: string;
+  created_at: string;
+};
+
+const fromReviewRow = (r: ReviewRow): Review => ({
+  saleId: r.sale_id,
+  rating: r.rating,
+  comment: r.comment,
+  showPublic: r.show_public,
+  firstName: r.first_name,
+  invoiceNo: r.invoice_no,
+  stallName: r.stall_name,
+  createdAt: r.created_at,
+});
+
+export async function insertReview(r: Review): Promise<"ok" | "exists"> {
+  const res = await fetch(`${base()}/rest/v1/stall_reviews`, {
+    method: "POST",
+    headers: { ...headers(), prefer: "return=minimal" },
+    body: JSON.stringify({
+      sale_id: r.saleId,
+      rating: r.rating,
+      comment: r.comment,
+      show_public: r.showPublic,
+      first_name: r.firstName,
+      invoice_no: r.invoiceNo,
+      stall_name: r.stallName,
+    }),
+  });
+  if (res.ok) return "ok";
+  const detail = await res.text();
+  if (res.status === 409 || detail.includes('"23505"')) return "exists";
+  throw new Error(`supabase responded ${res.status}: ${detail}`);
+}
+
+export async function findReview(saleId: string): Promise<Review | null> {
+  const res = await fetch(
+    `${base()}/rest/v1/stall_reviews?select=*&sale_id=eq.${encodeURIComponent(saleId)}&limit=1`,
+    { headers: headers(), cache: "no-store" },
+  );
+  if (!res.ok)
+    throw new Error(`supabase responded ${res.status}: ${await res.text()}`);
+  const [row] = (await res.json()) as ReviewRow[];
+  return row ? fromReviewRow(row) : null;
+}
+
+export async function listReviews(limit = 500): Promise<Review[]> {
+  const res = await fetch(
+    `${base()}/rest/v1/stall_reviews?select=*&order=created_at.desc&limit=${limit}`,
+    { headers: headers(), cache: "no-store" },
+  );
+  if (!res.ok)
+    throw new Error(`supabase responded ${res.status}: ${await res.text()}`);
+  return ((await res.json()) as ReviewRow[]).map(fromReviewRow);
 }

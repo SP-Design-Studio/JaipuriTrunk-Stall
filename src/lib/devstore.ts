@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import type { Catalog } from "./catalog";
 import { invoiceNoFor, seqOf } from "./time";
-import type { Sale } from "./types";
+import type { Review, Sale } from "./types";
 
 /**
  * A stand-in for Supabase when there are no Supabase keys, so the till can be
@@ -25,6 +25,7 @@ type Data = {
   catalog: { catalog: Catalog; updatedAt: string } | null;
   settings?: Record<string, unknown>;
   stock?: Record<string, number>;
+  reviews?: Review[];
 };
 
 async function load(): Promise<Data> {
@@ -141,4 +142,21 @@ export async function consumeStock(
     if (id in stock) stock[id] = Math.max(stock[id] - qty, 0);
   d.stock = stock;
   await save(d);
+}
+
+export async function insertReview(r: Review): Promise<"ok" | "exists"> {
+  const d = await load();
+  const reviews = d.reviews ?? [];
+  if (reviews.some((x) => x.saleId === r.saleId)) return "exists";
+  d.reviews = [{ ...r, createdAt: new Date().toISOString() }, ...reviews];
+  await save(d);
+  return "ok";
+}
+
+export async function findReview(saleId: string): Promise<Review | null> {
+  return (await load()).reviews?.find((x) => x.saleId === saleId) ?? null;
+}
+
+export async function listReviews(limit = 500): Promise<Review[]> {
+  return ((await load()).reviews ?? []).slice(0, limit);
 }

@@ -137,3 +137,15 @@ This is a note for the owner, not legal advice; confirm with your CA.
 - Receipts have torn, printer-feed edges top and bottom (a row of small teeth drawn
   as an SVG strip in `Receipt.tsx`; `TOOTH` / `TOOTH_H` set their size). The capture
   keeps the corners transparent and lays the PNG, PDF and print pages on white.
+- Reviews: when a customer opens their bill link they are first asked for a review
+  (1 to 5 stars, an optional comment, and a tick box for "OK to show this publicly
+  with my first name"), with a Skip button that is remembered on their own phone
+  for 3 days. The same review has its own link (`<receipt link>/review`) for a
+  later WhatsApp nudge: the **Ask for a review on WhatsApp** button on a bill, and a
+  `{review}` tag in Settings → WhatsApp messages (there is a new "Ask for a review"
+  message). The signed link ties a review to one real bill, one review per bill,
+  with no login. Staff read them in Sales → Reviews. Reviews are never shown
+  publicly by the app; the consent tick is stored for when you want that. **Run
+  migration `0005_add_reviews.sql` first.** Until it is run, the bill opens as
+  before and simply doesn't ask. Add a Vercel firewall rate limit on `/api/review`
+  (like the login one): 10 requests per minute per IP is plenty.

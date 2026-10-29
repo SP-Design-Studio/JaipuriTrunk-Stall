@@ -38,6 +38,12 @@ export function linkPath(id: string): string | null {
   return h ? `/r/${id}.${h.digest("base64url").slice(0, 22)}` : null;
 }
 
+/** The customer's review page for the same bill: the receipt link plus /review. */
+export function reviewPath(id: string): string | null {
+  const p = linkPath(id);
+  return p ? `${p}/review` : null;
+}
+
 /** The sale id behind a link, or null if the signature is wrong. */
 export function idFromToken(token: string): string | null {
   const at = token.lastIndexOf(".");
@@ -80,6 +86,7 @@ export function withProof(sale: Sale): Sale {
   return {
     ...sale,
     receiptPath: linkPath(sale.id) ?? undefined,
+    reviewPath: reviewPath(sale.id) ?? undefined,
     verifyCode: verifyCodeFor(sale) ?? undefined,
   };
 }

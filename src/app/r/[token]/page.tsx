@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import ReceiptView from "@/components/ReceiptView";
 import { idFromToken, withProof } from "@/lib/receiptlink";
-import { available, findSale } from "@/lib/store";
+import { available, findReview, findSale } from "@/lib/store";
 
 /**
  * A customer's receipt, reachable only through the signed link the till gave
@@ -21,14 +21,25 @@ export default async function ReceiptPage({
 }: {
   params: Promise<{ token: string }>;
 }) {
-  const { token } = await params;
-  const id = idFromToken(decodeURIComponent(token));
+  const { token: raw } = await params;
+  const token = decodeURIComponent(raw);
+  const id = idFromToken(token);
   if (!id || !available()) notFound();
   const sale = await findSale(id);
   if (!sale) notFound();
+  // Ask for a review first, unless this bill has one. If reviews cannot be read
+  // (the migration is not run yet) the bill simply opens as before.
+  let askReview = false;
+  try {
+    askReview = (await findReview(id)) === null;
+  } catch {
+    askReview = false;
+  }
   // Name and phone never leave the server on this route.
   return (
     <ReceiptView
+      token={token}
+      askReview={askReview}
       sale={{
         ...withProof(sale),
         customerName: "",

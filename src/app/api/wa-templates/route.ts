@@ -13,7 +13,11 @@ export async function GET(request: Request) {
   if (!requestHasSession(request)) return fail("Sign in again.", 401);
   if (!available()) return fail("storage-not-configured", 503);
   try {
-    const found = await getSetting<{ receipt: string; followUp: string }>(KEY);
+    const found = await getSetting<{
+      receipt: string;
+      followUp: string;
+      reviewAsk?: string;
+    }>(KEY);
     return NextResponse.json({ templates: found }, { headers: noStore });
   } catch (err) {
     console.error("[stall] could not read templates:", err);
@@ -26,7 +30,7 @@ export async function PUT(request: Request) {
   if (!requestHasSession(request)) return fail("Sign in again.", 401);
   if (!request.headers.get("content-type")?.includes("application/json"))
     return fail("Send JSON.", 415);
-  let body: { receipt?: unknown; followUp?: unknown };
+  let body: { receipt?: unknown; followUp?: unknown; reviewAsk?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -34,14 +38,22 @@ export async function PUT(request: Request) {
   }
   const ok = (v: unknown): v is string =>
     typeof v === "string" && v.trim().length > 0 && v.length <= MAX_TEMPLATE;
-  if (!ok(body.receipt) || !ok(body.followUp))
+  if (
+    !ok(body.receipt) ||
+    !ok(body.followUp) ||
+    (body.reviewAsk !== undefined && !ok(body.reviewAsk))
+  )
     return fail(
       `Each message needs some text, up to ${MAX_TEMPLATE} characters.`,
       400,
     );
   if (!available()) return fail("storage-not-configured", 503);
   try {
-    await putSetting(KEY, { receipt: body.receipt, followUp: body.followUp });
+    await putSetting(KEY, {
+      receipt: body.receipt,
+      followUp: body.followUp,
+      ...(body.reviewAsk !== undefined ? { reviewAsk: body.reviewAsk } : {}),
+    });
     return NextResponse.json({ ok: true }, { headers: noStore });
   } catch (err) {
     console.error("[stall] could not save templates:", err);

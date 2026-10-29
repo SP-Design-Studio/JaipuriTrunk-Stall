@@ -264,3 +264,29 @@ export function parseCatalog(body: unknown): CatalogResult {
   }
   return { ok: true, catalog: { categories } };
 }
+
+export const REVIEW_MAX = 500;
+
+/** What a customer sends: a whole-number rating, an optional comment, and consent. */
+export function parseReview(
+  body: unknown,
+):
+  | { ok: true; rating: number; comment: string; showPublic: boolean }
+  | { ok: false; error: string } {
+  if (!isObj(body)) return { ok: false, error: "Malformed request." };
+  if (!int(body.rating, 1, 5))
+    return { ok: false, error: "Pick 1 to 5 stars." };
+  if (body.comment !== undefined && !text(body.comment, REVIEW_MAX + 200))
+    return { ok: false, error: "That comment is too long." };
+  const comment = typeof body.comment === "string" ? body.comment.trim() : "";
+  if (comment.length > REVIEW_MAX)
+    return { ok: false, error: `Keep it to ${REVIEW_MAX} characters.` };
+  if (body.showPublic !== undefined && typeof body.showPublic !== "boolean")
+    return { ok: false, error: "Malformed request." };
+  return {
+    ok: true,
+    rating: body.rating as number,
+    comment,
+    showPublic: body.showPublic === true,
+  };
+}

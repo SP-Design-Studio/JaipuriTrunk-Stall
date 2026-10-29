@@ -1,7 +1,7 @@
 import type { Catalog } from "./catalog";
 import * as dev from "./devstore";
 import * as supabase from "./db";
-import type { Sale } from "./types";
+import type { Review, Sale } from "./types";
 
 /**
  * Where data lives. The routes talk to this and never choose for themselves.
@@ -37,6 +37,9 @@ export const getStock = () => via().getStock();
 export const setStock = (id: string, q: number | null) => via().setStock(id, q);
 export const consumeStock = (t: Record<string, number>) =>
   via().consumeStock(t);
+export const insertReview = (r: Review) => via().insertReview(r);
+export const findReview = (saleId: string) => via().findReview(saleId);
+export const listReviews = (limit?: number) => via().listReviews(limit);
 export const findSale = (id: string) => via().findSale(id);
 export const findByInvoice = (n: string) => via().findByInvoice(n);
 export const listSales = (limit?: number) => via().listSales(limit);

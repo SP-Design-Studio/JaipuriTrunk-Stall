@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { Catalog } from "@/lib/catalog";
-import type { StallEntry } from "@/lib/types";
+import type { Review, StallEntry } from "@/lib/types";
 import { itemsToCsv, salesToCsv } from "@/lib/csv";
 import { download } from "@/lib/download";
 import { itemRows } from "@/lib/report";
@@ -35,6 +35,7 @@ export default function Sales({
   stalls,
   catalog,
   stock,
+  reviews,
   onOpen,
 }: {
   sales: Sale[];
@@ -46,11 +47,13 @@ export default function Sales({
   /** The item list and stock counts, for the Stock tab. */
   catalog: Catalog | null;
   stock: Record<string, number> | null;
+  /** Buyers' reviews; null if they cannot be read. */
+  reviews: Review[] | null;
   onOpen: (sale: Sale) => void;
 }) {
   const [range, setRange] = useState<"today" | "all">("today");
   const [view, setView] = useState<
-    "log" | "sold" | "days" | "stalls" | "stock" | "people"
+    "log" | "sold" | "days" | "stalls" | "stock" | "reviews" | "people"
   >("log");
   const [verifying, setVerifying] = useState(false);
   const [stallFilter, setStallFilter] = useState("all");
@@ -205,6 +208,15 @@ export default function Sales({
       )
       .sort((a, b) => a.left - b.left || a.name.localeCompare(b.name));
   }, [catalog, stock, shown]);
+  const shownReviews = useMemo(
+    () =>
+      (reviews ?? []).filter(
+        (r) =>
+          (range === "all" || dayKey(r.createdAt) === todayKey()) &&
+          (stallFilter === "all" || r.stallName === stallFilter),
+      ),
+    [reviews, range, stallFilter],
+  );
   const needAttention = stockRows.filter((r) => r.left <= 3).length;
 
   /** One row per day in the list, newest first, for the books. */
@@ -385,6 +397,15 @@ export default function Sales({
               <span className="ml-2 bg-amber-400 px-1.5 text-xs font-semibold text-amber-950">
                 {needAttention} low
               </span>
+            )}
+          </button>
+          <button
+            onClick={() => setView("reviews")}
+            className={tab(view === "reviews")}
+          >
+            Reviews
+            {shownReviews.length > 0 && (
+              <span className="text-ink/50 ml-1">({shownReviews.length})</span>
             )}
           </button>
           <button
@@ -602,6 +623,65 @@ export default function Sales({
             </>
           ))}
 
+        {view === "reviews" &&
+          (shownReviews.length === 0 ? (
+            empty(
+              reviews === null
+                ? "Reviews aren’t available yet."
+                : "No reviews in this list yet. Customers are asked when they open their bill.",
+            )
+          ) : (
+            <>
+              <div className="border-maroon/15 flex flex-wrap items-center gap-x-6 gap-y-1 border bg-white/50 p-4">
+                <div>
+                  <span className="font-display text-maroon text-3xl">
+                    {(
+                      shownReviews.reduce((n, r) => n + r.rating, 0) /
+                      shownReviews.length
+                    ).toFixed(1)}
+                  </span>
+                  <span className="text-ink/50 text-sm"> / 5</span>
+                </div>
+                <div className="text-sm">
+                  <Stars
+                    n={Math.round(
+                      shownReviews.reduce((n, r) => n + r.rating, 0) /
+                        shownReviews.length,
+                    )}
+                  />
+                  <div className="text-ink/60">
+                    {shownReviews.length} review
+                    {shownReviews.length === 1 ? "" : "s"} ·{" "}
+                    {shownReviews.filter((r) => r.showPublic).length} OK to show
+                    publicly
+                  </div>
+                </div>
+              </div>
+              <ul className={list}>
+                {shownReviews.map((r) => (
+                  <li key={r.saleId} className="space-y-1 px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Stars n={r.rating} />
+                      {r.showPublic && (
+                        <span className="bg-emerald-700 px-1.5 py-0.5 text-[11px] font-semibold text-white">
+                          OK to show
+                        </span>
+                      )}
+                    </div>
+                    {r.comment && (
+                      <p className="text-sm whitespace-pre-wrap">{r.comment}</p>
+                    )}
+                    <p className="text-ink/50 text-xs">
+                      {r.firstName || "Customer"} · {r.invoiceNo}
+                      {r.stallName ? ` · ${r.stallName}` : ""} ·{" "}
+                      {prettyDate(r.createdAt)}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ))}
+
         {view === "stalls" &&
           (stallRows.length === 0 ? (
             empty("No bills yet.")
@@ -811,5 +891,18 @@ export default function Sales({
         />
       )}
     </div>
+  );
+}
+
+/** Filled stars out of five, for a review's rating. */
+function Stars({ n }: { n: number }) {
+  return (
+    <span
+      aria-label={`${n} out of 5 stars`}
+      className="tracking-wider text-[#f49b49]"
+    >
+      {"★".repeat(n)}
+      <span className="text-ink/20">{"★".repeat(5 - n)}</span>
+    </span>
   );
 }

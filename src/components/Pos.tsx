@@ -14,6 +14,7 @@ import Sales from "./Sales";
 import { ToastProvider, useToast } from "./Toasts";
 import { useCatalog } from "./useCatalog";
 import { useStalls } from "./useStalls";
+import { useReviews } from "./useReviews";
 import { useStock } from "./useStock";
 import { useSales, type SaveResult } from "./useSales";
 
@@ -57,6 +58,7 @@ function PosScreen() {
   const templates = useTemplates();
   const stallList = useStalls();
   const stockApi = useStock();
+  const reviewsApi = useReviews();
   const [view, setView] = useState<"register" | "sales" | "items" | "settings">(
     "register",
   );
@@ -251,6 +253,7 @@ function PosScreen() {
               setView("sales");
               void refresh();
               void stockApi.refresh();
+              void reviewsApi.refresh();
             }}
             className={nav(view === "sales")}
           >
@@ -343,6 +346,7 @@ function PosScreen() {
           stalls={stallList.stalls ?? []}
           catalog={items.catalog}
           stock={stockApi.stock}
+          reviews={reviewsApi.reviews}
           onOpen={(sale) => setReceipt({ sale, fresh: false })}
         />
       )}

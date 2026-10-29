@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { BUSINESS } from "@/lib/config";
-import { receiptText, waLink, waWebLink, type Templates } from "@/lib/messages";
+import {
+  receiptText,
+  reviewText,
+  waLink,
+  waWebLink,
+  type Templates,
+} from "@/lib/messages";
 import type { Sale } from "@/lib/types";
 import Modal from "./Modal";
 import { useToast } from "./Toasts";
@@ -61,6 +67,7 @@ export default function ReceiptSheet({
     process.env.NEXT_PUBLIC_RECEIPT_BASE_URL || window.location.origin
   ).replace(/\/+$/, "");
   const link = sale.receiptPath ? `${base}${sale.receiptPath}` : undefined;
+  const reviewLink = sale.reviewPath ? `${base}${sale.reviewPath}` : undefined;
 
   async function copyLink() {
     if (!link) return;
@@ -94,7 +101,7 @@ export default function ReceiptSheet({
         .share({
           files: [file],
           title: `${BUSINESS.name} receipt`,
-          text: receiptText(sale, link, templates),
+          text: receiptText(sale, link, templates, reviewLink),
         })
         .catch(() => {
           // Dismissing the sheet rejects with AbortError. Not an error.
@@ -179,7 +186,7 @@ export default function ReceiptSheet({
             <a
               href={waLink(
                 sale.customerPhone,
-                receiptText(sale, link, templates),
+                receiptText(sale, link, templates, reviewLink),
               )}
               className={`${btn} border-olive/40 text-olive hover:bg-olive/10 border`}
             >
@@ -190,7 +197,7 @@ export default function ReceiptSheet({
             <a
               href={waWebLink(
                 sale.customerPhone,
-                receiptText(sale, link, templates),
+                receiptText(sale, link, templates, reviewLink),
               )}
               target="_blank"
               rel="noreferrer"
@@ -203,6 +210,19 @@ export default function ReceiptSheet({
             <button onClick={copyLink} className={outline}>
               Copy receipt link
             </button>
+          )}
+          {/* The customer is also asked for a review when they open their bill;
+              this is for a nudge later, or if they skipped it. */}
+          {sale.customerPhone && reviewLink && (
+            <a
+              href={waLink(
+                sale.customerPhone,
+                reviewText(sale, reviewLink, templates),
+              )}
+              className={`${btn} border-olive/40 text-olive hover:bg-olive/10 border`}
+            >
+              Ask for a review on WhatsApp
+            </a>
           )}
           <button
             onClick={onClose}

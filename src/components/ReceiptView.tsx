@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Sale } from "@/lib/types";
 import Receipt from "./Receipt";
+import ReviewForm from "./ReviewForm";
 import { useReceiptFiles } from "./useReceiptFiles";
 
 /**
@@ -10,9 +11,50 @@ import { useReceiptFiles } from "./useReceiptFiles";
  * as the one at the stall, with buttons to keep it. Nothing is stored on their
  * phone unless they choose to download.
  */
-export default function ReceiptView({ sale }: { sale: Sale }) {
+/** How long "Skip for now" is remembered on the customer's own phone. */
+const SKIP_DAYS = 3;
+const skipKey = (token: string) => `jts-review-skip:${token}`;
+
+export default function ReceiptView({
+  sale,
+  token,
+  askReview,
+}: {
+  sale: Sale;
+  /** The receipt link's token, which the review is sent with. */
+  token: string;
+  /** True when this bill has no review yet (and reviews can be read at all). */
+  askReview: boolean;
+}) {
   const { ref, named, failed } = useReceiptFiles(sale);
   const [note, setNote] = useState("");
+  // The review comes first. The bill is already on the page underneath (the
+  // PNG and PDF are made from it), covered until the customer sends or skips.
+  const [asking, setAsking] = useState(askReview);
+
+  // Someone who skipped recently isn't nagged again on this phone. Only the
+  // customer's own browser is used, and only to remember that one tap.
+  useEffect(() => {
+    if (!askReview) return;
+    const t = window.setTimeout(() => {
+      try {
+        const at = Number(localStorage.getItem(skipKey(token)));
+        if (at && Date.now() - at < SKIP_DAYS * 86_400_000) setAsking(false);
+      } catch {
+        // Storage blocked: they simply get asked.
+      }
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [askReview, token]);
+
+  function skip() {
+    try {
+      localStorage.setItem(skipKey(token), String(Date.now()));
+    } catch {
+      // Not remembered; fine.
+    }
+    setAsking(false);
+  }
 
   function save(file: File | undefined) {
     if (!file) return;
@@ -59,6 +101,23 @@ export default function ReceiptView({ sale }: { sale: Sale }) {
           {note || "This page stays available at this link."}
         </p>
       </div>
+      {asking && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Review your purchase"
+          className="bg-cream fixed inset-0 z-40 flex flex-col items-center justify-center overflow-y-auto"
+        >
+          <ReviewForm
+            token={token}
+            onSubmitted={() => {
+              setAsking(false);
+              setNote("Thank you for your review!");
+            }}
+            onSkip={skip}
+          />
+        </div>
+      )}
     </main>
   );
 }

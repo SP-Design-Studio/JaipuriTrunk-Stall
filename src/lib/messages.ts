@@ -15,15 +15,29 @@ export const waWebLink = (phone: string, text: string) =>
   `https://wa.me/91${phone}?text=${encodeURIComponent(text)}`;
 
 /**
- * The two WhatsApp messages the till writes, as templates the owner can edit in
+ * The WhatsApp messages the till writes, as templates the owner can edit in
  * Settings. A template is plain text with {placeholders}:
  *
- *   {name} {bill} {total} {payment} {link} {business} {website} {instagram}
+ *   {name} {bill} {total} {payment} {link} {review} {stall} {business} {website}
+ *   {instagram}
  *
- * A line whose {link} or {instagram} has nothing to fill it is dropped whole,
+ * A line whose {link}, {review}, {stall} or {instagram} has nothing to fill it is dropped whole,
  * rather than sent as "View your receipt: ". {name} falls back to "there".
  */
-export type Templates = { receipt: string; followUp: string };
+export type Templates = {
+  receipt: string;
+  followUp: string;
+  /** Asking for a review, sent from a bill. Older saved lists lack it. */
+  reviewAsk?: string;
+};
+
+/** Every message filled in, with the standard wording for any that were never saved. */
+export const fullTemplates = (
+  saved: Templates | null,
+): Required<Templates> => ({
+  ...defaultTemplates(),
+  ...(saved ?? {}),
+});
 
 export const PLACEHOLDERS = [
   ["{name}", "customer’s name"],
@@ -31,6 +45,7 @@ export const PLACEHOLDERS = [
   ["{total}", "amount paid"],
   ["{payment}", "UPI or Cash"],
   ["{link}", "their receipt link"],
+  ["{review}", "their review link"],
   ["{stall}", "which stall"],
   ["{business}", "shop name"],
   ["{website}", "website"],
@@ -39,7 +54,7 @@ export const PLACEHOLDERS = [
 
 export const MAX_TEMPLATE = 1000;
 
-export function defaultTemplates(): Templates {
+export function defaultTemplates(): Required<Templates> {
   return {
     receipt: [
       `Hi {name}! Thank you for shopping at the {business} stall.`,
@@ -49,6 +64,10 @@ export function defaultTemplates(): Templates {
     ]
       .filter(Boolean)
       .join("\n"),
+    reviewAsk: [
+      `Hi {name}! Thanks for shopping at the {business} stall.`,
+      `How was it? Tell us in ten seconds: {review}`,
+    ].join("\n"),
     followUp: [
       `Hi {name}! Thanks for stopping by the {business} stall.`,
       LAUNCH_LABEL
@@ -65,6 +84,7 @@ type Vars = {
   total?: string;
   payment?: string;
   link?: string;
+  review?: string;
   stall?: string;
 };
 
@@ -75,6 +95,7 @@ export function render(template: string, v: Vars): string {
     total: v.total ?? "",
     payment: v.payment ?? "",
     link: v.link ?? "",
+    review: v.review ?? "",
     stall: v.stall ?? "",
     business: BUSINESS.name,
     website: BUSINESS.website,
@@ -87,7 +108,11 @@ export function render(template: string, v: Vars): string {
       // A line that leans on a value we don't have says nothing useful.
       return !used.some(
         (k) =>
-          (k === "link" || k === "instagram" || k === "stall") && !values[k],
+          (k === "link" ||
+            k === "review" ||
+            k === "instagram" ||
+            k === "stall") &&
+          !values[k],
       );
     })
     .join("\n")
@@ -98,8 +123,10 @@ export function receiptText(
   sale: Sale,
   link?: string,
   templates?: Templates | null,
+  reviewLink?: string,
 ): string {
   return render((templates ?? defaultTemplates()).receipt, {
+    review: reviewLink,
     name: sale.customerName,
     bill: sale.invoiceNo,
     total: inr(sale.total),
@@ -115,4 +142,20 @@ export function followUpText(
   templates?: Templates | null,
 ): string {
   return render((templates ?? defaultTemplates()).followUp, { name });
+}
+
+/** The message that asks a buyer for a review, from a bill. */
+export function reviewText(
+  sale: Sale,
+  reviewLink?: string,
+  templates?: Templates | null,
+): string {
+  return render(fullTemplates(templates ?? null).reviewAsk, {
+    name: sale.customerName,
+    bill: sale.invoiceNo,
+    total: inr(sale.total),
+    payment: sale.paymentMode,
+    stall: sale.stall?.name,
+    review: reviewLink,
+  });
 }

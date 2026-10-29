@@ -70,5 +70,21 @@ export type Sale = SaleInput & {
   total: number;
   /** Added by the server on the way out (see receiptlink.ts); never stored. */
   receiptPath?: string;
+  /** The customer's review link for this bill (the receipt link + /review). */
+  reviewPath?: string;
   verifyCode?: string;
+};
+
+/** A buyer's review of one bill. */
+export type Review = {
+  saleId: string;
+  rating: number;
+  comment: string;
+  /** Ticked "OK to show this publicly with my first name". */
+  showPublic: boolean;
+  /** From the bill, on the server. */
+  firstName: string;
+  invoiceNo: string;
+  stallName: string;
+  createdAt: string;
 };
