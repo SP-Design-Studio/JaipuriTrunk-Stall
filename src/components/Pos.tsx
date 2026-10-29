@@ -347,6 +347,8 @@ function PosScreen() {
           catalog={items.catalog}
           stock={stockApi.stock}
           reviews={reviewsApi.reviews}
+          reviewStatuses={reviewsApi.statuses}
+          onReviewAsked={() => void reviewsApi.refresh()}
           onOpen={(sale) => setReceipt({ sale, fresh: false })}
         />
       )}
@@ -377,6 +379,7 @@ function PosScreen() {
           sale={receipt.sale}
           fresh={receipt.fresh}
           templates={templates.saved}
+          onReviewAsked={() => void reviewsApi.refresh()}
           onClose={closeReceipt}
         />
       )}

@@ -1,6 +1,15 @@
 import type { Catalog } from "./catalog";
 import { invoiceNoFor, seqOf } from "./time";
-import type { Discount, Line, PaymentMode, Review, Sale, Stall } from "./types";
+import type {
+  Discount,
+  Line,
+  PaymentMode,
+  Review,
+  ReviewEvent,
+  ReviewStatus,
+  Sale,
+  Stall,
+} from "./types";
 
 /**
  * Sales live in Supabase, reached over its REST endpoint with the service-role
@@ -388,4 +397,55 @@ export async function listReviews(limit = 500): Promise<Review[]> {
   if (!res.ok)
     throw new Error(`supabase responded ${res.status}: ${await res.text()}`);
   return ((await res.json()) as ReviewRow[]).map(fromReviewRow);
+}
+
+/**
+ * Review prompts per bill (stall_review_status, migration 0006). An upsert that
+ * sets only the one timestamp named, so the others keep their values.
+ */
+const EVENT_COLUMN: Record<ReviewEvent, string> = {
+  asked: "asked_at",
+  skipped: "skipped_at",
+  requested: "requested_at",
+};
+
+export async function markReviewEvent(
+  saleId: string,
+  event: ReviewEvent,
+): Promise<void> {
+  const res = await fetch(`${base()}/rest/v1/stall_review_status`, {
+    method: "POST",
+    headers: {
+      ...headers(),
+      prefer: "resolution=merge-duplicates,return=minimal",
+    },
+    body: JSON.stringify({
+      sale_id: saleId,
+      [EVENT_COLUMN[event]]: new Date().toISOString(),
+    }),
+  });
+  if (!res.ok)
+    throw new Error(`supabase responded ${res.status}: ${await res.text()}`);
+}
+
+export async function listReviewStatus(): Promise<ReviewStatus[]> {
+  const res = await fetch(
+    `${base()}/rest/v1/stall_review_status?select=*&limit=2000`,
+    { headers: headers(), cache: "no-store" },
+  );
+  if (!res.ok)
+    throw new Error(`supabase responded ${res.status}: ${await res.text()}`);
+  return (
+    (await res.json()) as {
+      sale_id: string;
+      asked_at: string | null;
+      skipped_at: string | null;
+      requested_at: string | null;
+    }[]
+  ).map((r) => ({
+    saleId: r.sale_id,
+    askedAt: r.asked_at,
+    skippedAt: r.skipped_at,
+    requestedAt: r.requested_at,
+  }));
 }

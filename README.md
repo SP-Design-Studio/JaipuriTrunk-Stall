@@ -149,3 +149,12 @@ This is a note for the owner, not legal advice; confirm with your CA.
   migration `0005_add_reviews.sql` first.** Until it is run, the bill opens as
   before and simply doesn't ask. Add a Vercel firewall rate limit on `/api/review`
   (like the login one): 10 requests per minute per IP is plenty.
+- Review tracking: the server notes when a bill's review prompt was shown, when the
+  customer tapped Skip, and when staff sent the review link on WhatsApp. A
+  review always wins, so someone who skipped and later wrote one counts as
+  reviewed; the later link just works, as the review is tied to the bill, not to
+  the first prompt. Sales shows a ★ / "Skipped review" / "Review link sent" tag on
+  each bill, and Sales → Reviews has "X of Y bills reviewed" plus a **Not
+  reviewed** list (who skipped, who was nudged, who was never asked) with an
+  **Ask on WhatsApp** button. **Run migration `0006_review_status.sql` first**;
+  until then reviews still work but Sales can't say who skipped or was asked.

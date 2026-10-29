@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { sendReviewEvent } from "@/lib/reviewEvents";
 import type { Sale } from "@/lib/types";
 import Receipt from "./Receipt";
 import ReviewForm from "./ReviewForm";
@@ -39,7 +40,12 @@ export default function ReceiptView({
     const t = window.setTimeout(() => {
       try {
         const at = Number(localStorage.getItem(skipKey(token)));
-        if (at && Date.now() - at < SKIP_DAYS * 86_400_000) setAsking(false);
+        if (at && Date.now() - at < SKIP_DAYS * 86_400_000) {
+          setAsking(false);
+          return;
+        }
+        // They are being asked: note it, so staff can tell who has seen the prompt.
+        sendReviewEvent(token, "asked");
       } catch {
         // Storage blocked: they simply get asked.
       }
@@ -48,6 +54,7 @@ export default function ReceiptView({
   }, [askReview, token]);
 
   function skip() {
+    sendReviewEvent(token, "skipped");
     try {
       localStorage.setItem(skipKey(token), String(Date.now()));
     } catch {

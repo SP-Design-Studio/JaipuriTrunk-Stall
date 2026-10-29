@@ -88,3 +88,13 @@ export type Review = {
   stallName: string;
   createdAt: string;
 };
+
+/** What happened to the review prompt on one bill (see migration 0006). */
+export type ReviewStatus = {
+  saleId: string;
+  askedAt: string | null;
+  skippedAt: string | null;
+  requestedAt: string | null;
+};
+
+export type ReviewEvent = "asked" | "skipped" | "requested";

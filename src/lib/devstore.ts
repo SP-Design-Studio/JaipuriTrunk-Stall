@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import type { Catalog } from "./catalog";
 import { invoiceNoFor, seqOf } from "./time";
-import type { Review, Sale } from "./types";
+import type { Review, ReviewEvent, ReviewStatus, Sale } from "./types";
 
 /**
  * A stand-in for Supabase when there are no Supabase keys, so the till can be
@@ -26,6 +26,7 @@ type Data = {
   settings?: Record<string, unknown>;
   stock?: Record<string, number>;
   reviews?: Review[];
+  reviewStatus?: Record<string, ReviewStatus>;
 };
 
 async function load(): Promise<Data> {
@@ -159,4 +160,30 @@ export async function findReview(saleId: string): Promise<Review | null> {
 
 export async function listReviews(limit = 500): Promise<Review[]> {
   return ((await load()).reviews ?? []).slice(0, limit);
+}
+
+export async function markReviewEvent(
+  saleId: string,
+  event: ReviewEvent,
+): Promise<void> {
+  const d = await load();
+  const now = new Date().toISOString();
+  const cur: ReviewStatus = d.reviewStatus?.[saleId] ?? {
+    saleId,
+    askedAt: null,
+    skippedAt: null,
+    requestedAt: null,
+  };
+  const next =
+    event === "asked"
+      ? { ...cur, askedAt: now }
+      : event === "skipped"
+        ? { ...cur, skippedAt: now }
+        : { ...cur, requestedAt: now };
+  d.reviewStatus = { ...d.reviewStatus, [saleId]: next };
+  await save(d);
+}
+
+export async function listReviewStatus(): Promise<ReviewStatus[]> {
+  return Object.values((await load()).reviewStatus ?? {});
 }

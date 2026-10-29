@@ -9,6 +9,7 @@ import {
   waWebLink,
   type Templates,
 } from "@/lib/messages";
+import { receiptBase } from "@/lib/receiptBase";
 import type { Sale } from "@/lib/types";
 import Modal from "./Modal";
 import { useToast } from "./Toasts";
@@ -35,10 +36,13 @@ export default function ReceiptSheet({
   sale,
   fresh,
   templates,
+  onReviewAsked,
   onClose,
 }: {
   sale: Sale;
   templates: Templates | null;
+  /** Called after the review link was sent, so Sales can show it as requested. */
+  onReviewAsked?: () => void;
   /** True straight after a sale, so the close button reads "Next customer". */
   fresh: boolean;
   onClose: () => void;
@@ -63,9 +67,7 @@ export default function ReceiptSheet({
   // The link is relative on the server. Customers get the public address if one
   // is set (NEXT_PUBLIC_RECEIPT_BASE_URL, e.g. https://stall.jaipuritrunk.com),
   // whatever address the till itself was opened on; otherwise the till's own.
-  const base = (
-    process.env.NEXT_PUBLIC_RECEIPT_BASE_URL || window.location.origin
-  ).replace(/\/+$/, "");
+  const base = receiptBase();
   const link = sale.receiptPath ? `${base}${sale.receiptPath}` : undefined;
   const reviewLink = sale.reviewPath ? `${base}${sale.reviewPath}` : undefined;
 
@@ -219,6 +221,17 @@ export default function ReceiptSheet({
                 sale.customerPhone,
                 reviewText(sale, reviewLink, templates),
               )}
+              onClick={() => {
+                // Note that this customer was asked, so Sales can show it.
+                void fetch("/api/review-request", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ saleId: sale.id }),
+                  keepalive: true,
+                })
+                  .then(() => onReviewAsked?.())
+                  .catch(() => {});
+              }}
               className={`${btn} border-olive/40 text-olive hover:bg-olive/10 border`}
             >
               Ask for a review on WhatsApp

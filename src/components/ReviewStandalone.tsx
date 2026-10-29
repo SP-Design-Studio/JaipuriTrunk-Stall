@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { sendReviewEvent } from "@/lib/reviewEvents";
 import ReviewForm from "./ReviewForm";
 
 /** The review on a page of its own (the link in a WhatsApp message). */
@@ -14,6 +15,10 @@ export default function ReviewStandalone({
   alreadyDone: boolean;
 }) {
   const [done, setDone] = useState(alreadyDone);
+  // Opening this page is being asked, whether or not they go on to answer.
+  useEffect(() => {
+    if (!alreadyDone) sendReviewEvent(token, "asked");
+  }, [alreadyDone, token]);
   return (
     <main className="bg-cream flex min-h-dvh flex-col items-center justify-center">
       {done ? (

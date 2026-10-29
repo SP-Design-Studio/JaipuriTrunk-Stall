@@ -2,11 +2,18 @@
 
 import { useMemo, useState } from "react";
 import type { Catalog } from "@/lib/catalog";
-import type { Review, StallEntry } from "@/lib/types";
+import { receiptBase } from "@/lib/receiptBase";
+import { describe, reviewState } from "@/lib/reviewState";
+import type { Review, ReviewStatus, StallEntry } from "@/lib/types";
 import { itemsToCsv, salesToCsv } from "@/lib/csv";
 import { download } from "@/lib/download";
 import { itemRows } from "@/lib/report";
-import { followUpText, waLink, type Templates } from "@/lib/messages";
+import {
+  followUpText,
+  reviewText,
+  waLink,
+  type Templates,
+} from "@/lib/messages";
 import { inr, variantOf } from "@/lib/money";
 import {
   dayKey,
@@ -36,6 +43,8 @@ export default function Sales({
   catalog,
   stock,
   reviews,
+  reviewStatuses,
+  onReviewAsked,
   onOpen,
 }: {
   sales: Sale[];
@@ -49,6 +58,10 @@ export default function Sales({
   stock: Record<string, number> | null;
   /** Buyers' reviews; null if they cannot be read. */
   reviews: Review[] | null;
+  /** When each bill was asked, skipped or nudged for a review. */
+  reviewStatuses: ReviewStatus[];
+  /** Called after staff sent a review link, so the list can refresh. */
+  onReviewAsked: () => void;
   onOpen: (sale: Sale) => void;
 }) {
   const [range, setRange] = useState<"today" | "all">("today");
@@ -208,6 +221,22 @@ export default function Sales({
       )
       .sort((a, b) => a.left - b.left || a.name.localeCompare(b.name));
   }, [catalog, stock, shown]);
+  const reviewMap = useMemo(
+    () => new Map((reviews ?? []).map((r) => [r.saleId, r])),
+    [reviews],
+  );
+  const statusMap = useMemo(
+    () => new Map(reviewStatuses.map((x) => [x.saleId, x])),
+    [reviewStatuses],
+  );
+  /** Bills in the current list with no review yet, newest first. */
+  const missingReviews = useMemo(
+    () => shown.filter((x) => !reviewMap.has(x.id)),
+    [shown, reviewMap],
+  );
+  const [reviewMode, setReviewMode] = useState<"written" | "missing">(
+    "written",
+  );
   const shownReviews = useMemo(
     () =>
       (reviews ?? []).filter(
@@ -472,6 +501,9 @@ export default function Sales({
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm">
                         {s.customerName || "Walk-in"}
+                        <ReviewBadge
+                          state={reviewState(s, reviewMap, statusMap)}
+                        />
                         {s.customerPhone && (
                           <span className="text-ink/45">
                             {" "}
@@ -623,64 +655,156 @@ export default function Sales({
             </>
           ))}
 
-        {view === "reviews" &&
-          (shownReviews.length === 0 ? (
-            empty(
-              reviews === null
-                ? "Reviews aren’t available yet."
-                : "No reviews in this list yet. Customers are asked when they open their bill.",
-            )
-          ) : (
-            <>
-              <div className="border-maroon/15 flex flex-wrap items-center gap-x-6 gap-y-1 border bg-white/50 p-4">
-                <div>
-                  <span className="font-display text-maroon text-3xl">
-                    {(
-                      shownReviews.reduce((n, r) => n + r.rating, 0) /
-                      shownReviews.length
-                    ).toFixed(1)}
-                  </span>
-                  <span className="text-ink/50 text-sm"> / 5</span>
-                </div>
-                <div className="text-sm">
-                  <Stars
-                    n={Math.round(
-                      shownReviews.reduce((n, r) => n + r.rating, 0) /
-                        shownReviews.length,
-                    )}
-                  />
-                  <div className="text-ink/60">
-                    {shownReviews.length} review
-                    {shownReviews.length === 1 ? "" : "s"} ·{" "}
-                    {shownReviews.filter((r) => r.showPublic).length} OK to show
-                    publicly
-                  </div>
-                </div>
+        {view === "reviews" && (
+          <>
+            {/* Who has written one: out of the bills in this list. */}
+            <div className="border-maroon/15 flex flex-wrap items-center gap-x-6 gap-y-1 border bg-white/50 p-4">
+              <div>
+                <span className="font-display text-maroon text-3xl">
+                  {shown.length - missingReviews.length}
+                </span>
+                <span className="text-ink/50 text-sm">
+                  {" "}
+                  of {shown.length} bills reviewed
+                </span>
               </div>
-              <ul className={list}>
-                {shownReviews.map((r) => (
-                  <li key={r.saleId} className="space-y-1 px-4 py-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Stars n={r.rating} />
-                      {r.showPublic && (
-                        <span className="bg-emerald-700 px-1.5 py-0.5 text-[11px] font-semibold text-white">
-                          OK to show
-                        </span>
+              {shown.length > 0 && (
+                <div className="text-ink/60 text-sm">
+                  {Math.round(
+                    ((shown.length - missingReviews.length) / shown.length) *
+                      100,
+                  )}
+                  % ·{" "}
+                  {shownReviews.length > 0 &&
+                    `average ${(shownReviews.reduce((n, r) => n + r.rating, 0) / shownReviews.length).toFixed(1)} / 5 · `}
+                  {shownReviews.filter((r) => r.showPublic).length} OK to show
+                  publicly
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setReviewMode("written")}
+                className={tab(reviewMode === "written")}
+              >
+                Written ({shownReviews.length})
+              </button>
+              <button
+                onClick={() => setReviewMode("missing")}
+                className={tab(reviewMode === "missing")}
+              >
+                Not reviewed ({missingReviews.length})
+              </button>
+            </div>
+
+            {reviewMode === "written" &&
+              (shownReviews.length === 0 ? (
+                empty(
+                  reviews === null
+                    ? "Reviews aren’t available yet."
+                    : "No reviews in this list yet. Customers are asked when they open their bill.",
+                )
+              ) : (
+                <ul className={list}>
+                  {shownReviews.map((r) => (
+                    <li key={r.saleId} className="space-y-1 px-4 py-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Stars n={r.rating} />
+                        {r.showPublic && (
+                          <span className="bg-emerald-700 px-1.5 py-0.5 text-[11px] font-semibold text-white">
+                            OK to show
+                          </span>
+                        )}
+                      </div>
+                      {r.comment && (
+                        <p className="text-sm whitespace-pre-wrap">
+                          {r.comment}
+                        </p>
                       )}
-                    </div>
-                    {r.comment && (
-                      <p className="text-sm whitespace-pre-wrap">{r.comment}</p>
-                    )}
-                    <p className="text-ink/50 text-xs">
-                      {r.firstName || "Customer"} · {r.invoiceNo}
-                      {r.stallName ? ` · ${r.stallName}` : ""} ·{" "}
-                      {prettyDate(r.createdAt)}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            </>
-          ))}
+                      <p className="text-ink/50 text-xs">
+                        {r.firstName || "Customer"} · {r.invoiceNo}
+                        {r.stallName ? ` · ${r.stallName}` : ""} ·{" "}
+                        {prettyDate(r.createdAt)}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              ))}
+
+            {/* The people to follow up with: who skipped, who was nudged, who
+                hasn't been asked, each with a one-tap WhatsApp. */}
+            {reviewMode === "missing" &&
+              (missingReviews.length === 0 ? (
+                empty("Everyone in this list has reviewed. Lovely.")
+              ) : (
+                <ul className={list}>
+                  {missingReviews.map((x) => {
+                    const state = reviewState(x, reviewMap, statusMap);
+                    return (
+                      <li
+                        key={x.id}
+                        className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm">
+                            {x.customerName || "Walk-in"}
+                            <span className="text-ink/45">
+                              {" "}
+                              · {x.customerPhone || "no number"}
+                            </span>
+                          </div>
+                          <div className="text-ink/50 text-xs">
+                            {x.invoiceNo} ·{" "}
+                            <span
+                              className={
+                                state.kind === "skipped"
+                                  ? "font-semibold text-amber-700"
+                                  : ""
+                              }
+                            >
+                              {describe(state, prettyDate)}
+                            </span>
+                          </div>
+                        </div>
+                        {x.customerPhone && x.reviewPath ? (
+                          <a
+                            href={waLink(
+                              x.customerPhone,
+                              reviewText(
+                                x,
+                                `${receiptBase()}${x.reviewPath}`,
+                                templates,
+                              ),
+                            )}
+                            onClick={() => {
+                              // Note that they were asked, so this list stays honest.
+                              void fetch("/api/review-request", {
+                                method: "POST",
+                                headers: { "content-type": "application/json" },
+                                body: JSON.stringify({ saleId: x.id }),
+                                keepalive: true,
+                              })
+                                .then(() => onReviewAsked())
+                                .catch(() => {});
+                            }}
+                            className="border-olive/40 text-olive hover:bg-olive/10 inline-flex min-h-11 items-center border px-4 text-sm"
+                          >
+                            {state.kind === "requested"
+                              ? "Ask again"
+                              : "Ask on WhatsApp"}
+                          </a>
+                        ) : (
+                          <span className="text-ink/40 text-xs">
+                            No number to message
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ))}
+          </>
+        )}
 
         {view === "stalls" &&
           (stallRows.length === 0 ? (
@@ -905,4 +1029,27 @@ function Stars({ n }: { n: number }) {
       <span className="text-ink/20">{"★".repeat(5 - n)}</span>
     </span>
   );
+}
+
+/** A small tag on a bill: reviewed, skipped, or the link was sent. Quiet otherwise. */
+function ReviewBadge({ state }: { state: ReturnType<typeof reviewState> }) {
+  if (state.kind === "reviewed")
+    return (
+      <span className="ml-2 bg-emerald-700 px-1.5 py-0.5 text-[11px] font-semibold text-white">
+        ★ {state.rating}
+      </span>
+    );
+  if (state.kind === "skipped")
+    return (
+      <span className="ml-2 bg-amber-400 px-1.5 py-0.5 text-[11px] font-semibold text-amber-950">
+        Skipped review
+      </span>
+    );
+  if (state.kind === "requested")
+    return (
+      <span className="ml-2 bg-sky-700 px-1.5 py-0.5 text-[11px] font-semibold text-white">
+        Review link sent
+      </span>
+    );
+  return null;
 }
