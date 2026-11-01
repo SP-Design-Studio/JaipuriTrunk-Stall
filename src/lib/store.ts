@@ -43,6 +43,8 @@ export const listReviews = (limit?: number) => via().listReviews(limit);
 export const markReviewEvent = (id: string, e: ReviewEvent) =>
   via().markReviewEvent(id, e);
 export const listReviewStatus = () => via().listReviewStatus();
+export const updateSalePhone = (id: string, phone: string, also: boolean) =>
+  via().updateSalePhone(id, phone, also);
 export const findSale = (id: string) => via().findSale(id);
 export const findByInvoice = (n: string) => via().findByInvoice(n);
 export const listSales = (limit?: number) => via().listSales(limit);

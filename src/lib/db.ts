@@ -449,3 +449,35 @@ export async function listReviewStatus(): Promise<ReviewStatus[]> {
     requestedAt: r.requested_at,
   }));
 }
+
+/**
+ * Corrects a customer's phone number on a bill, and optionally on every other bill
+ * that carries the same (wrong) number. Only the number changes: nothing about the
+ * sale, its money or its bill number. Returns the bills that changed.
+ */
+export async function updateSalePhone(
+  saleId: string,
+  phone: string,
+  alsoSameNumber: boolean,
+): Promise<Sale[]> {
+  const before = await findSale(saleId);
+  if (!before) return [];
+  const patch = async (filter: string): Promise<Sale[]> => {
+    const res = await fetch(`${base()}/rest/v1/stall_sales?${filter}`, {
+      method: "PATCH",
+      headers: { ...headers(), prefer: "return=representation" },
+      body: JSON.stringify({ customer_phone: phone }),
+    });
+    if (!res.ok)
+      throw new Error(`supabase responded ${res.status}: ${await res.text()}`);
+    return ((await res.json()) as Row[]).map(fromRow);
+  };
+  const changed = await patch(`id=eq.${encodeURIComponent(saleId)}`);
+  if (alsoSameNumber && before.customerPhone && phone) {
+    const others = await patch(
+      `customer_phone=eq.${encodeURIComponent(before.customerPhone)}&id=neq.${encodeURIComponent(saleId)}`,
+    );
+    changed.push(...others);
+  }
+  return changed;
+}

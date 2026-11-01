@@ -187,3 +187,26 @@ export async function markReviewEvent(
 export async function listReviewStatus(): Promise<ReviewStatus[]> {
   return Object.values((await load()).reviewStatus ?? {});
 }
+
+export async function updateSalePhone(
+  saleId: string,
+  phone: string,
+  alsoSameNumber: boolean,
+): Promise<Sale[]> {
+  const d = await load();
+  const target = d.sales.find((x) => x.id === saleId);
+  if (!target) return [];
+  const old = target.customerPhone;
+  const changed: Sale[] = [];
+  d.sales = d.sales.map((x) => {
+    const hit =
+      x.id === saleId ||
+      (alsoSameNumber && !!old && !!phone && x.customerPhone === old);
+    if (!hit) return x;
+    const next = { ...x, customerPhone: phone };
+    changed.push(next);
+    return next;
+  });
+  await save(d);
+  return changed;
+}

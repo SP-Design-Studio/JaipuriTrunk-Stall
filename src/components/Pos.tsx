@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { BUSINESS } from "@/lib/config";
 import type { Sale } from "@/lib/types";
+import EditPhone from "./EditPhone";
 import ManageItems from "./ManageItems";
 import ReceiptSheet from "./ReceiptSheet";
 import Register from "./Register";
@@ -52,12 +53,14 @@ export default function Pos() {
 function PosScreen() {
   const router = useRouter();
   const toast = useToast();
-  const { sales, conn, refresh, save, clear } = useSales();
+  const { sales, conn, refresh, save, clear, patch } = useSales();
   const items = useCatalog();
   const qr = useUpiQr();
   const templates = useTemplates();
   const stallList = useStalls();
   const stockApi = useStock();
+  // The bill whose phone number is being corrected, if the form is open.
+  const [editingPhone, setEditingPhone] = useState<Sale | null>(null);
   const reviewsApi = useReviews();
   const [view, setView] = useState<"register" | "sales" | "items" | "settings">(
     "register",
@@ -348,6 +351,7 @@ function PosScreen() {
           stock={stockApi.stock}
           reviews={reviewsApi.reviews}
           reviewStatuses={reviewsApi.statuses}
+          onEditPhone={setEditingPhone}
           onReviewAsked={() => void reviewsApi.refresh()}
           onOpen={(sale) => setReceipt({ sale, fresh: false })}
         />
@@ -380,7 +384,31 @@ function PosScreen() {
           fresh={receipt.fresh}
           templates={templates.saved}
           onReviewAsked={() => void reviewsApi.refresh()}
+          onEditPhone={setEditingPhone}
           onClose={closeReceipt}
+        />
+      )}
+      {editingPhone && (
+        <EditPhone
+          // The list may have moved on since the form opened: use its latest copy.
+          sale={sales.find((x) => x.id === editingPhone.id) ?? editingPhone}
+          sharedWith={
+            editingPhone.customerPhone
+              ? sales.filter(
+                  (x) =>
+                    x.id !== editingPhone.id &&
+                    x.customerPhone === editingPhone.customerPhone,
+                ).length
+              : 0
+          }
+          onSaved={(updated) => {
+            patch(updated);
+            // If this bill's receipt is open, show the corrected copy.
+            const mine = updated.find((u) => u.id === receipt?.sale.id);
+            if (mine && receipt) setReceipt({ ...receipt, sale: mine });
+            setEditingPhone(null);
+          }}
+          onClose={() => setEditingPhone(null)}
         />
       )}
     </div>

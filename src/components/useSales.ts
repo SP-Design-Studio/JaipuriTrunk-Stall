@@ -139,5 +139,14 @@ export function useSales() {
   /** After the server has deleted everything: empty the list on screen. */
   const clear = useCallback(() => setSales([]), []);
 
-  return { sales, conn, refresh, save, clear };
+  /** After a bill's details were corrected on the server: swap them in the list. */
+  const patch = useCallback(
+    (updated: Sale[]) =>
+      setSales((cur) =>
+        cur.map((s) => updated.find((u) => u.id === s.id) ?? s),
+      ),
+    [],
+  );
+
+  return { sales, conn, refresh, save, clear, patch };
 }

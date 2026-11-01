@@ -158,3 +158,17 @@ This is a note for the owner, not legal advice; confirm with your CA.
   reviewed** list (who skipped, who was nudged, who was never asked) with an
   **Ask on WhatsApp** button. **Run migration `0006_review_status.sql` first**;
   until then reviews still work but Sales can't say who skipped or was asked.
+- Phone numbers work for any country (`src/lib/phone.ts`): an Indian mobile as 10
+  digits (stored exactly as before), or `+` and the country code for everywhere
+  else, e.g. `+1 415 555 2671`. Spaces, dashes and brackets are ignored; `00` counts
+  as `+`; `+91 …` is stored as the same 10-digit Indian number. A number outside
+  India must start with `+`, since a bare number can't say which country it is.
+  The WhatsApp links use the right country code. No database change was needed
+  (the column is plain text); bills already saved keep working.
+- Editing a number later: on a bill's receipt sheet (Sales → tap a bill) there is
+  "WhatsApp: … · Edit number" (or "Add number"), and the Sales → Reviews → Not
+  reviewed list has the same link. It corrects only the phone number, never the
+  amounts or items, accepts the same formats as the till (India 10 digits or `+`
+  and a country code), and can also fix every other bill carrying the same old
+  number. A customer who agreed to be messaged can't have their number removed.
+  No database change.

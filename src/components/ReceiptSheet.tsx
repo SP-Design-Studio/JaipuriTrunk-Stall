@@ -37,12 +37,15 @@ export default function ReceiptSheet({
   fresh,
   templates,
   onReviewAsked,
+  onEditPhone,
   onClose,
 }: {
   sale: Sale;
   templates: Templates | null;
   /** Called after the review link was sent, so Sales can show it as requested. */
   onReviewAsked?: () => void;
+  /** Opens the form to correct this bill's phone number. */
+  onEditPhone?: (sale: Sale) => void;
   /** True straight after a sale, so the close button reads "Next customer". */
   fresh: boolean;
   onClose: () => void;
@@ -177,6 +180,21 @@ export default function ReceiptSheet({
             </p>
           )}
 
+          {onEditPhone && (
+            <div className="border-maroon/15 flex items-center justify-between gap-2 border-t pt-2 text-sm">
+              <span className="text-ink/70 min-w-0 truncate">
+                {sale.customerPhone
+                  ? `WhatsApp: ${sale.customerPhone}`
+                  : "No WhatsApp number"}
+              </span>
+              <button
+                onClick={() => onEditPhone(sale)}
+                className="text-maroon min-h-11 shrink-0 px-2 underline"
+              >
+                {sale.customerPhone ? "Edit number" : "Add number"}
+              </button>
+            </div>
+          )}
           {!link && (
             <p role="alert" className="text-maroon text-sm">
               No receipt link: RECEIPT_SECRET isn’t set on this server. Add it

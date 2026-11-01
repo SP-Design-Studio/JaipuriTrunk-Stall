@@ -1,4 +1,5 @@
 import { totalsFor } from "./money";
+import { PHONE_HINT, normalizePhone } from "./phone";
 import {
   LIMITS,
   type Catalog,
@@ -11,7 +12,6 @@ type Result = { ok: true; sale: Sale } | { ok: false; error: string };
 
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const PHONE = /^[6-9]\d{9}$/;
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
@@ -85,14 +85,13 @@ export function parseSale(
     return { ok: false, error: "Name is too long." };
   if (!restore && body.customerName.trim() === "")
     return { ok: false, error: "The customer’s name is needed." };
-  if (
-    typeof body.customerPhone !== "string" ||
-    (body.customerPhone && !PHONE.test(body.customerPhone))
-  )
-    return {
-      ok: false,
-      error: "Phone must be a 10-digit Indian mobile number.",
-    };
+  // Any country: an Indian 10-digit mobile, or +country-code and number. Stored in
+  // that one normal form; empty is allowed (a walk-in who would rather not say).
+  if (typeof body.customerPhone !== "string")
+    return { ok: false, error: "Bad phone number." };
+  const phone =
+    body.customerPhone.trim() === "" ? "" : normalizePhone(body.customerPhone);
+  if (phone === null) return { ok: false, error: `Phone: ${PHONE_HINT}.` };
   if (typeof body.marketingOk !== "boolean")
     return { ok: false, error: "Missing consent flag." };
 
@@ -127,7 +126,7 @@ export function parseSale(
     invoiceNo: restore ? String(body.invoiceNo) : "",
     createdAt: new Date(created).toISOString(),
     customerName: body.customerName.trim(),
-    customerPhone: body.customerPhone,
+    customerPhone: phone,
     marketingOk: body.marketingOk,
     lines,
     discount,

@@ -45,6 +45,7 @@ export default function Sales({
   reviews,
   reviewStatuses,
   onReviewAsked,
+  onEditPhone,
   onOpen,
 }: {
   sales: Sale[];
@@ -62,6 +63,8 @@ export default function Sales({
   reviewStatuses: ReviewStatus[];
   /** Called after staff sent a review link, so the list can refresh. */
   onReviewAsked: () => void;
+  /** Opens the form to correct a bill's phone number. */
+  onEditPhone: (sale: Sale) => void;
   onOpen: (sale: Sale) => void;
 }) {
   const [range, setRange] = useState<"today" | "all">("today");
@@ -798,6 +801,13 @@ export default function Sales({
                             No number to message
                           </span>
                         )}
+                        {/* A wrong number is the usual reason nothing arrives. */}
+                        <button
+                          onClick={() => onEditPhone(x)}
+                          className="text-maroon min-h-11 px-2 text-sm underline"
+                        >
+                          {x.customerPhone ? "Edit number" : "Add number"}
+                        </button>
                       </li>
                     );
                   })}

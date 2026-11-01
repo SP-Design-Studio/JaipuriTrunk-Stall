@@ -1,4 +1,5 @@
 import { inr } from "./money";
+import { whatsappNumber } from "./phone";
 import { BUSINESS, LAUNCH_LABEL, PROMO } from "./config";
 import type { Sale } from "./types";
 
@@ -6,13 +7,13 @@ import type { Sale } from "./types";
  * Opens the WhatsApp app directly. `whatsapp://send` skips the wa.me web page
  * that asks "Open in WhatsApp?" first. It does nothing if the app isn't
  * installed, so `waWebLink` is kept as the fallback. Both want the country
- * code and digits only; these are Indian mobile numbers.
+ * code and digits only; `whatsappNumber` adds India's 91 to a 10-digit number.
  */
 export const waLink = (phone: string, text: string) =>
-  `whatsapp://send?phone=91${phone}&text=${encodeURIComponent(text)}`;
+  `whatsapp://send?phone=${whatsappNumber(phone)}&text=${encodeURIComponent(text)}`;
 
 export const waWebLink = (phone: string, text: string) =>
-  `https://wa.me/91${phone}?text=${encodeURIComponent(text)}`;
+  `https://wa.me/${whatsappNumber(phone)}?text=${encodeURIComponent(text)}`;
 
 /**
  * The WhatsApp messages the till writes, as templates the owner can edit in

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Image from "next/image";
 import { tilesOf, type Catalog, type Tile } from "@/lib/catalog";
+import { PHONE_HINT, normalizePhone } from "@/lib/phone";
 import { inr, lineTotal, totalsFor } from "@/lib/money";
 import type { Discount, Line, PaymentMode, Sale, Stall } from "@/lib/types";
 import Modal from "./Modal";
@@ -211,11 +212,11 @@ export default function Register({
     if (frozen) return void attempt(frozen);
     if (lines.length === 0) return setError("Add something to the bill first.");
     if (!name.trim()) return setError("Add the customer’s name.");
-    if (phone && !/^[6-9]\d{9}$/.test(phone))
-      return setError(
-        "Phone should be a 10-digit Indian mobile number, or leave it empty.",
-      );
-    if (marketingOk && !phone)
+    // Any country: normalise what was typed, or say how to write it.
+    const normalPhone = phone.trim() ? normalizePhone(phone) : "";
+    if (normalPhone === null)
+      return setError(`Phone: ${PHONE_HINT}, or leave it empty.`);
+    if (marketingOk && !normalPhone)
       return setError("Add their number to message them, or untick the box.");
 
     const now = new Date();
@@ -224,7 +225,7 @@ export default function Register({
       invoiceNo: "", // the server numbers the bill when it saves it
       createdAt: now.toISOString(),
       customerName: name.trim(),
-      customerPhone: phone,
+      customerPhone: normalPhone,
       marketingOk,
       lines,
       discount,
@@ -455,13 +456,31 @@ export default function Register({
                 id="c-phone"
                 value={phone}
                 onChange={(e) =>
-                  setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))
+                  // Digits, "+", and the usual separators; the rest is dropped.
+                  setPhone(
+                    e.target.value.replace(/[^\d+\s\-().]/g, "").slice(0, 22),
+                  )
                 }
-                inputMode="numeric"
-                placeholder="10 digits"
+                inputMode="tel"
+                type="tel"
+                placeholder="98765 43210 or +1 415…"
                 autoComplete="off"
                 className={input}
               />
+              {/* A quiet check as they type, so a slip is caught at the stall. */}
+              {phone.trim() !== "" && (
+                <p
+                  className={`mt-1 text-xs ${normalizePhone(phone) ? "text-ink/55" : "text-amber-700"}`}
+                >
+                  {(() => {
+                    const n = normalizePhone(phone);
+                    if (!n) return "Not a valid number yet";
+                    return n.startsWith("+")
+                      ? `International · ${n}`
+                      : "India · +91";
+                  })()}
+                </p>
+              )}
             </div>
           </div>
           <label className="text-ink/70 flex min-h-11 items-center gap-3 text-sm">
