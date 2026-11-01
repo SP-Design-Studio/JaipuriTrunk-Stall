@@ -1,8 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { inr } from "@/lib/money";
-import { hourLabel, hourOf } from "@/lib/time";
+import { inr, shareText } from "@/lib/money";
 import type { Review, Sale } from "@/lib/types";
 
 /**
@@ -36,13 +35,17 @@ function Card({
   title,
   note,
   children,
+  wide = false,
 }: {
   title: string;
   note?: string;
   children: React.ReactNode;
+  wide?: boolean;
 }) {
   return (
-    <section className="border-maroon/15 space-y-3 border bg-white/50 p-4">
+    <section
+      className={`border-maroon/15 space-y-3 border bg-white/50 p-4 ${wide ? "md:col-span-2" : ""}`}
+    >
       <div>
         <h3 className="font-display text-maroon text-lg">{title}</h3>
         {note && <p className="text-ink/50 text-xs">{note}</p>}
@@ -94,21 +97,6 @@ export default function Insights({
         amount: list.reduce((x, s) => x + s.discountAmount, 0),
       };
     });
-
-    // When it is busy (India time).
-    const hours = new Map<number, { bills: number; total: number }>();
-    for (const s of sales) {
-      const h = hourOf(s.createdAt);
-      const cur = hours.get(h) ?? { bills: 0, total: 0 };
-      hours.set(h, { bills: cur.bills + 1, total: cur.total + s.total });
-    }
-    const hourRows = [...hours.entries()].sort((x, y) => x[0] - y[0]);
-    const peak = hourRows.reduce<
-      [number, { bills: number; total: number }] | null
-    >(
-      (best, row) => (!best || row[1].total > best[1].total ? row : best),
-      null,
-    );
 
     // What a basket looks like.
     const itemsIn = (s: Sale) => s.lines.reduce((x, l) => x + l.qty, 0);
@@ -183,8 +171,6 @@ export default function Insights({
       avgWith: avg(withOffer),
       avgWithout: avg(without),
       byType,
-      hourRows,
-      peak,
       units,
       buckets,
       biggest,
@@ -207,9 +193,8 @@ export default function Insights({
       </p>
     );
 
-  const maxHour = Math.max(...a.hourRows.map(([, v]) => v.total), 1);
   const maxBucket = Math.max(...a.buckets.map((b) => b.bills), 1);
-  const row = "flex items-baseline justify-between gap-3 text-sm";
+  const row = "num flex items-baseline justify-between gap-3 text-sm";
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -232,7 +217,7 @@ export default function Insights({
             <div className={row}>
               <span className="font-semibold">{r.label}</span>
               <span>
-                {inr(r.total)} · {pct(r.total, a.total)}%
+                {inr(r.total)} · {shareText(r.total, a.total)}
                 <span className="text-ink/45">
                   {" "}
                   · {r.bills} bill{r.bills === 1 ? "" : "s"}
@@ -256,7 +241,7 @@ export default function Insights({
         <div className={row}>
           <span>Bills that had an offer</span>
           <strong>
-            {a.withOffer.length} of {a.n} ({pct(a.withOffer.length, a.n)}%)
+            {a.withOffer.length} of {a.n} ({shareText(a.withOffer.length, a.n)})
           </strong>
         </div>
         <div className="border-maroon/10 space-y-1 border-t pt-2">
@@ -269,7 +254,7 @@ export default function Insights({
                 <div key={t.k} className={row}>
                   <span>{t.label}</span>
                   <span>
-                    {inr(t.amount)}{" "}
+                    <span className="text-loss">−{inr(t.amount)}</span>{" "}
                     <span className="text-ink/45">
                       · {t.bills} bill{t.bills === 1 ? "" : "s"}
                     </span>
@@ -277,35 +262,6 @@ export default function Insights({
                 </div>
               ))
           )}
-        </div>
-      </Card>
-
-      <Card
-        title="Busiest hours"
-        note={
-          a.peak
-            ? `Takings by hour of the day (India time). Peak: ${hourLabel(a.peak[0])}, ${inr(a.peak[1].total)}.`
-            : undefined
-        }
-      >
-        <div className="space-y-1.5">
-          {a.hourRows.map(([h, v]) => (
-            <div key={h} className="flex items-center gap-3 text-xs">
-              <span className="w-12 shrink-0 text-right">{hourLabel(h)}</span>
-              <div className="flex-1">
-                <Bar
-                  value={v.total}
-                  max={maxHour}
-                  tone={
-                    a.peak && h === a.peak[0] ? "bg-[#f49b49]" : "bg-maroon"
-                  }
-                />
-              </div>
-              <span className="w-28 shrink-0 text-right">
-                {inr(v.total)} · {v.bills}
-              </span>
-            </div>
-          ))}
         </div>
       </Card>
 
@@ -360,18 +316,18 @@ export default function Insights({
               <span>Returning customers</span>
               <strong>
                 {a.returning.length} (
-                {pct(a.returning.length, a.customers.length)}%)
+                {shareText(a.returning.length, a.customers.length)})
               </strong>
             </div>
             <div className={row}>
               <span>Takings from returning customers</span>
               <strong>
                 {inr(a.returningTotal)} (
-                {pct(
+                {shareText(
                   a.returningTotal,
                   a.customers.reduce((x, c) => x + c.total, 0),
                 )}
-                %)
+                )
               </strong>
             </div>
             <div className="border-maroon/10 space-y-1 border-t pt-2">
@@ -445,7 +401,7 @@ export default function Insights({
             <div className={row}>
               <span>{label as string}</span>
               <strong>
-                {count as number} of {a.n} ({pct(count as number, a.n)}%)
+                {count as number} of {a.n} ({shareText(count as number, a.n)})
               </strong>
             </div>
             <Bar value={count as number} max={a.n} />

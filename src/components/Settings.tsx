@@ -13,6 +13,7 @@ import {
 import { BACKUP_APP, backupOf } from "@/lib/backup";
 import { downloadText } from "@/lib/download";
 import { prettyRange, todayKey } from "@/lib/time";
+import { STALL_LIMITS } from "@/lib/validate";
 import type { Sale } from "@/lib/types";
 import Modal from "./Modal";
 import RangeCalendar from "./RangeCalendar";
@@ -638,6 +639,15 @@ function StallsCard({
     setShowDays(false);
   }
 
+  /** Replaces one row of the cost list in the open form. */
+  function setCosts(at: number, next: { label: string; amount: number }) {
+    setForm((f) =>
+      f
+        ? { ...f, costs: (f.costs ?? []).map((c, i) => (i === at ? next : c)) }
+        : f,
+    );
+  }
+
   function edit(s: StallEntry) {
     setForm({ ...s });
     setIsNew(false);
@@ -654,12 +664,20 @@ function StallsCard({
       )
     )
       return void toast.error("Another stall already has that name.");
-    const entry = {
+    // A cost with no amount is dropped; one with an amount needs a name.
+    const costs = (form.costs ?? [])
+      .map((c) => ({ label: c.label.trim(), amount: c.amount }))
+      .filter((c) => c.amount > 0 || c.label !== "");
+    if (costs.some((c) => c.label === "" || c.amount <= 0))
+      return void toast.error("Each cost needs a name and an amount.");
+    const entry: StallEntry = {
       ...form,
       name,
       address: form.address.trim(),
       phone: form.phone.trim(),
     };
+    if (costs.length) entry.costs = costs;
+    else delete entry.costs;
     const next = isNew
       ? [entry, ...stalls]
       : stalls.map((x) => (x.id === entry.id ? entry : x));
@@ -853,6 +871,99 @@ function StallsCard({
                 onChange={(from, to) => setForm({ ...form, from, to })}
               />
             )}
+            <div className="border-maroon/15 space-y-2 border bg-white/60 p-3">
+              <div>
+                <div className="text-olive/80 text-xs tracking-[0.14em] uppercase">
+                  What this stall costs
+                </div>
+                <div className="text-ink/55 text-xs">
+                  Optional. Used only for profit in Analysis.
+                </div>
+              </div>
+              {(form.costs ?? []).map((c, i) => (
+                <div key={i} className="flex gap-2">
+                  <input
+                    value={c.label}
+                    onChange={(e) =>
+                      setCosts(i, { ...c, label: e.target.value })
+                    }
+                    maxLength={STALL_LIMITS.costLabel}
+                    placeholder="e.g. Stall fee"
+                    aria-label="What the cost is for"
+                    className={`${field} min-w-0 flex-1`}
+                  />
+                  <div className="relative w-32 shrink-0">
+                    <span className="text-ink/40 pointer-events-none absolute top-1/2 left-3 -translate-y-1/2">
+                      ₹
+                    </span>
+                    <input
+                      value={c.amount ? String(c.amount) : ""}
+                      onChange={(e) =>
+                        setCosts(i, {
+                          ...c,
+                          amount: Number(
+                            e.target.value.replace(/\D/g, "").slice(0, 7),
+                          ),
+                        })
+                      }
+                      inputMode="numeric"
+                      placeholder="0"
+                      aria-label={`Amount for ${c.label || "this cost"}`}
+                      className={`${field} pl-7`}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm({
+                        ...form,
+                        costs: (form.costs ?? []).filter((_, k) => k !== i),
+                      })
+                    }
+                    aria-label={`Remove ${c.label || "this cost"}`}
+                    className="min-h-11 px-2 text-sm text-red-700 underline"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <div className="flex flex-wrap gap-2">
+                {["Stall fee", "Travel", "Helper", "Packing"]
+                  .filter((l) => !(form.costs ?? []).some((c) => c.label === l))
+                  .map((l) => (
+                    <button
+                      key={l}
+                      type="button"
+                      onClick={() =>
+                        setForm({
+                          ...form,
+                          costs: [
+                            ...(form.costs ?? []),
+                            { label: l, amount: 0 },
+                          ],
+                        })
+                      }
+                      disabled={(form.costs ?? []).length >= STALL_LIMITS.costs}
+                      className={`${outline} disabled:opacity-40`}
+                    >
+                      + {l}
+                    </button>
+                  ))}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setForm({
+                      ...form,
+                      costs: [...(form.costs ?? []), { label: "", amount: 0 }],
+                    })
+                  }
+                  disabled={(form.costs ?? []).length >= STALL_LIMITS.costs}
+                  className={`${outline} disabled:opacity-40`}
+                >
+                  + Other cost
+                </button>
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-2 pt-1">
               <button
                 type="button"

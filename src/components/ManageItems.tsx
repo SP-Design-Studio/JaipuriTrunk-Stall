@@ -96,6 +96,7 @@ export default function ManageItems({
   const [addingCategory, setAddingCategory] = useState(false);
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
+  const [cost, setCost] = useState("");
   const toast = useToast();
 
   const total = catalog.categories.reduce((n, c) => n + c.items.length, 0);
@@ -110,7 +111,12 @@ export default function ManageItems({
   const patchItem = (
     catId: string,
     itemId: string,
-    patch: { name?: string; price?: number | null; src?: string },
+    patch: {
+      name?: string;
+      price?: number | null;
+      cost?: number | undefined;
+      src?: string;
+    },
   ) =>
     onChange({
       categories: catalog.categories.map((c) =>
@@ -130,12 +136,14 @@ export default function ManageItems({
     setAddingCategory(false);
     setName("");
     setPrice("");
+    setCost("");
   }
 
   function addItem() {
     const label = name.trim();
     if (!addingTo || !label) return;
     const p = Number(price);
+    const k = Number(cost);
     patchCategory(addingTo, {
       items: [
         ...(catalog.categories.find((c) => c.id === addingTo)?.items ?? []),
@@ -143,6 +151,7 @@ export default function ManageItems({
           id: newId(),
           name: label,
           price: Number.isInteger(p) && p > 0 ? p : null,
+          ...(Number.isInteger(k) && k > 0 ? { cost: k } : {}),
         },
       ],
     });
@@ -345,6 +354,27 @@ export default function ManageItems({
                       className={`${box} pl-7`}
                     />
                   </div>
+                  <div className="relative w-28 shrink-0">
+                    <span className="text-ink/40 pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-base">
+                      ₹
+                    </span>
+                    <Field
+                      key={`c:${i.cost ?? "none"}`}
+                      value={i.cost === undefined ? "" : String(i.cost)}
+                      digitsOnly
+                      inputMode="numeric"
+                      placeholder="Cost"
+                      aria-label={`Cost price of ${i.name}`}
+                      title="What one piece costs you. Only used for profit in Analysis."
+                      onCommit={(v) => {
+                        const n = Number(v);
+                        patchItem(c.id, i.id, {
+                          cost: Number.isInteger(n) && n > 0 ? n : undefined,
+                        });
+                      }}
+                      className={`${box} pl-7`}
+                    />
+                  </div>
                   <div className="w-24 shrink-0">
                     <Field
                       key={`s:${stock?.[i.id] ?? "none"}`}
@@ -438,6 +468,18 @@ export default function ManageItems({
                 value={price}
                 onChange={(e) =>
                   setPrice(e.target.value.replace(/\D/g, "").slice(0, 7))
+                }
+                inputMode="numeric"
+                className={box}
+              />
+              <label className={`${label} mt-3`} htmlFor="add-cost">
+                Cost to you (₹), optional: used for profit in Analysis
+              </label>
+              <input
+                id="add-cost"
+                value={cost}
+                onChange={(e) =>
+                  setCost(e.target.value.replace(/\D/g, "").slice(0, 7))
                 }
                 inputMode="numeric"
                 className={box}

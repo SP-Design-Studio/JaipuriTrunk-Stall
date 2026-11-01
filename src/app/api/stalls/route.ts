@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { noStore, requestHasSession, sameOrigin } from "@/lib/guard";
 import { available, getSetting, putSetting } from "@/lib/store";
-import { STALL_LIMITS, parseStall } from "@/lib/validate";
+import { STALL_LIMITS, parseCosts, parseStall } from "@/lib/validate";
 import type { StallEntry } from "@/lib/types";
 
 /**
@@ -51,6 +51,8 @@ export async function PUT(request: Request) {
   for (const raw of body.stalls) {
     const id = (raw as { id?: unknown })?.id;
     const stall = parseStall(raw);
+    const costs = parseCosts((raw as { costs?: unknown })?.costs);
+    if (!costs) return fail("A cost needs a name and whole rupees.", 400);
     if (typeof id !== "string" || !ID.test(id) || seen.has(id) || !stall)
       return fail("Each stall needs a name and valid days.", 400);
     // Bills are matched to a stall by its name, so two cannot share one.
@@ -58,7 +60,7 @@ export async function PUT(request: Request) {
       return fail("Two stalls have the same name.", 400);
     seen.add(id);
     names.add(stall.name.toLowerCase());
-    stalls.push({ id, ...stall });
+    stalls.push({ id, ...stall, ...(costs.length ? { costs } : {}) });
   }
   const currentId = body.currentId ?? null;
   if (

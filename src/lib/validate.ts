@@ -6,7 +6,14 @@ import {
   type CatalogCategory,
   type CatalogItem,
 } from "./catalog";
-import type { Discount, Line, Sale, SaleInput, Stall } from "./types";
+import type {
+  Discount,
+  Line,
+  Sale,
+  SaleInput,
+  Stall,
+  StallCost,
+} from "./types";
 
 type Result = { ok: true; sale: Sale } | { ok: false; error: string };
 
@@ -138,7 +145,32 @@ export function parseSale(
 
 const ID = /^[a-z0-9-]{1,40}$/i;
 
-export const STALL_LIMITS = { name: 60, address: 160, phone: 30, count: 20 };
+export const STALL_LIMITS = {
+  name: 60,
+  address: 160,
+  phone: 30,
+  count: 20,
+  costs: 12,
+  costLabel: 40,
+};
+
+/** What a stall cost to run: a short label and whole rupees, none empty. */
+export function parseCosts(v: unknown): StallCost[] | null {
+  if (v === undefined || v === null) return [];
+  if (!Array.isArray(v) || v.length > STALL_LIMITS.costs) return null;
+  const out: StallCost[] = [];
+  for (const raw of v) {
+    if (
+      !isObj(raw) ||
+      !text(raw.label, STALL_LIMITS.costLabel) ||
+      raw.label.trim() === "" ||
+      !int(raw.amount, 1, 10_000_000)
+    )
+      return null;
+    out.push({ label: raw.label.trim(), amount: raw.amount as number });
+  }
+  return out;
+}
 
 /** A stall's details: a name, and optionally an address and phone to print. */
 export function parseStall(v: unknown): Stall | null {
@@ -242,6 +274,12 @@ export function parseCatalog(body: unknown): CatalogResult {
       if (rawItem.price !== null && !int(rawItem.price, 1, 1_000_000))
         return { ok: false, error: "A price must be whole rupees, or empty." };
       if (
+        rawItem.cost !== undefined &&
+        rawItem.cost !== null &&
+        !int(rawItem.cost, 1, 1_000_000)
+      )
+        return { ok: false, error: "A cost must be whole rupees, or empty." };
+      if (
         rawItem.src !== undefined &&
         (typeof rawItem.src !== "string" || !SRC.test(rawItem.src))
       )
@@ -250,6 +288,7 @@ export function parseCatalog(body: unknown): CatalogResult {
         id: rawItem.id,
         name: rawItem.name.trim(),
         price: rawItem.price as number | null,
+        ...(typeof rawItem.cost === "number" ? { cost: rawItem.cost } : {}),
         ...(typeof rawItem.src === "string" ? { src: rawItem.src } : {}),
       });
     }

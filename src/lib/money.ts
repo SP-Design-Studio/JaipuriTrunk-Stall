@@ -5,6 +5,25 @@ const group = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
 /** ₹1,299 and ₹1,24,999 — Indian lakh grouping, which `en-US` would get wrong. */
 export const inr = (n: number) => `₹${group.format(n)}`;
 
+/**
+ * ₹1.23 L and ₹4.5 Cr for big amounts, where space is tight (phone cards); under a
+ * lakh it is the plain figure. The full figure always stays available elsewhere.
+ */
+export function inrCompact(n: number): string {
+  const a = Math.abs(n);
+  const sign = n < 0 ? "−" : "";
+  if (a >= 1e7) return `${sign}₹${Number((a / 1e7).toFixed(2))} Cr`;
+  if (a >= 1e5) return `${sign}₹${Number((a / 1e5).toFixed(2))} L`;
+  return inr(n);
+}
+
+/** A share as a whole percent, but "<1%" rather than a misleading "0%" for a sliver. */
+export function shareText(part: number, whole: number): string {
+  if (!whole) return "0%";
+  const p = (part / whole) * 100;
+  return part > 0 && p < 1 ? "<1%" : `${Math.round(p)}%`;
+}
+
 export const lineTotal = (l: Pick<Line, "price" | "qty">) => l.price * l.qty;
 
 export const subtotalOf = (lines: Pick<Line, "price" | "qty">[]) =>

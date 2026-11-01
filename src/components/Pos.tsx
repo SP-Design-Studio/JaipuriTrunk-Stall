@@ -11,6 +11,7 @@ import EditPhone from "./EditPhone";
 import ManageItems from "./ManageItems";
 import ReceiptSheet from "./ReceiptSheet";
 import Register from "./Register";
+import Analysis from "./Analysis";
 import Sales from "./Sales";
 import { ToastProvider, useToast } from "./Toasts";
 import { useCatalog } from "./useCatalog";
@@ -62,9 +63,9 @@ function PosScreen() {
   // The bill whose phone number is being corrected, if the form is open.
   const [editingPhone, setEditingPhone] = useState<Sale | null>(null);
   const reviewsApi = useReviews();
-  const [view, setView] = useState<"register" | "sales" | "items" | "settings">(
-    "register",
-  );
+  const [view, setView] = useState<
+    "register" | "sales" | "analysis" | "items" | "settings"
+  >("register");
   /** Bumped after each sale: remounting is the whole "clear the till" logic. */
   const [till, setTill] = useState(0);
   const [receipt, setReceipt] = useState<{ sale: Sale; fresh: boolean } | null>(
@@ -263,6 +264,16 @@ function PosScreen() {
             Sales
           </button>
           <button
+            onClick={() => {
+              setView("analysis");
+              void refresh();
+              void reviewsApi.refresh();
+            }}
+            className={nav(view === "analysis")}
+          >
+            Analysis
+          </button>
+          <button
             onClick={() => setView("items")}
             className={nav(view === "items")}
           >
@@ -354,6 +365,15 @@ function PosScreen() {
           onEditPhone={setEditingPhone}
           onReviewAsked={() => void reviewsApi.refresh()}
           onOpen={(sale) => setReceipt({ sale, fresh: false })}
+        />
+      )}
+      {view === "analysis" && (
+        <Analysis
+          sales={sales}
+          catalog={items.catalog}
+          reviews={reviewsApi.reviews}
+          stalls={stallList.stalls ?? []}
+          currentStall={stall?.name}
         />
       )}
       {view === "items" && (

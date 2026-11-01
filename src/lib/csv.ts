@@ -13,6 +13,10 @@ const cell = (v: string | number | boolean) => {
   return `"${s.replace(/"/g, '""')}"`;
 };
 
+/** Any table as CSV, with the same formula-injection protection as the bill exports. */
+export const rowsToCsv = (rows: (string | number | boolean)[][]) =>
+  rows.map((r) => r.map(cell).join(",")).join("\r\n");
+
 export function salesToCsv(sales: Sale[]): string {
   const header = [
     "Invoice",

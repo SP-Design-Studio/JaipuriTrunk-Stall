@@ -19,6 +19,11 @@ export type CatalogItem = {
   /** Whole rupees, or null to ask at the till. */
   price: number | null;
   /**
+   * What one piece cost to make or buy, in whole rupees. Optional: without it an
+   * item simply has no profit figure. Used only for analysis, never at the till.
+   */
+  cost?: number;
+  /**
    * A bundled photograph. Only the starter items have one — adding a picture
    * from the iPad would need somewhere to store it, which is a separate job —
    * so anything added later shows a text tile.

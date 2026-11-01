@@ -122,3 +122,30 @@ export const PRICE_BANDS = [
 
 export const bandOf = (price: number) =>
   PRICE_BANDS.findIndex((b) => price < b.below);
+
+/** The current list price of each catalogue product, by item id (null = asked at the till). */
+export function listPrices(
+  catalog: Catalog | null,
+): Map<string, number | null> {
+  const m = new Map<string, number | null>();
+  for (const c of catalog?.categories ?? [])
+    for (const i of c.items) m.set(i.id, i.price);
+  return m;
+}
+
+/**
+ * ABC classes by money: A is the products that together bring the first 80% of
+ * takings, B the next 15%, C the tail. The product that crosses a line belongs to
+ * the class it starts in, so the best seller is always an A.
+ */
+export function abcClasses(rows: ProductRow[]): Map<string, "A" | "B" | "C"> {
+  const total = rows.reduce((n, r) => n + r.net, 0);
+  const out = new Map<string, "A" | "B" | "C">();
+  let before = 0;
+  for (const r of [...rows].sort((a, b) => b.net - a.net)) {
+    const at = total ? (before / total) * 100 : 0;
+    out.set(r.key, at < 80 ? "A" : at < 95 ? "B" : "C");
+    before += r.net;
+  }
+  return out;
+}

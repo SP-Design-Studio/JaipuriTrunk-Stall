@@ -178,15 +178,15 @@ This is a note for the owner, not legal advice; confirm with your CA.
   given (% off, flat amount, rounded to ₹10). Takings are after offers, so Takings
   + Offers = sales at full price. It follows the same Today / All / stall filter,
   and is display only: nothing stored or calculated elsewhere changed.
-- Sales → Insights: a read-only analysis of the bills in the current list (it follows
+- Analysis tab → Insights: a read-only analysis of the bills in the current list (it follows
   the Today / All / stall filter): how people pay (UPI vs cash share), offers (average
-  bill with vs without one, and how offers were given), busiest hours (India time),
+  bill with vs without one, and how offers were given),
   the typical basket (items per bill, bill-size spread, biggest bill), who comes back
   (returning customers matched by phone across all bills, their share of takings,
   top customers), which sizes and colours sell, and how well contact details and
   reviews are being collected. It only reads what bills already store: no database
   change, nothing written, and no other screen changed.
-- Sales → Products & money: what each product earned, after offers. A bill's offer is
+- Analysis tab → Products & money: what each product earned, after offers. A bill's offer is
   spread over its items in proportion to what each came to (in whole rupees, adding
   back exactly), so every product's **Net** adds up to Takings to the rupee; **Before
   offers** is the figure the "What sold" tab shows. Per product: pieces, before offers,
@@ -194,3 +194,39 @@ This is a note for the owner, not legal advice; confirm with your CA.
   then totals by category, by price point, money by size and by colour, and the
   products that did not sell in the current list. Read-only; follows the Today / All /
   stall filter; no database change. Logic in `src/lib/productMoney.ts`.
+- Analysis tab, more views (all read-only, nothing at the till changes):
+  - **Offers**: bills with an offer against bills without (pieces per bill, average bill, money per piece), by kind of
+    offer (5%, 10%, round-off, flat), and product by product (how often it is discounted, how much was given away,
+    and its own pieces and money per bill with and without an offer). A product gets a verdict (Paid off / More
+    pieces, less money / Just cut the price) once it has at least 3 bills on each side. These are bills as they
+    happened, not an experiment, so read a verdict as a hint.
+  - **Stalls & profit**: every stall side by side (days, bills, takings, per day, average bill, offers, stall costs,
+    goods cost, profit, break-even), a takings-against-costs chart, and a "Compare two stalls" table with green and
+    red changes. It ignores the Today / stall filter. Selling days are counted in Indian time.
+  - **Trend**: takings per selling day and average bill stall by stall, and for each product a small line of pieces
+    per day with Rising / Steady / Fading / New / Not sold lately (latest stall against the earlier ones).
+  - **Profit** needs two optional things. A **cost price per item** (Items screen, the Cost box; stored on the item,
+    used only for analysis) and **stall costs** (Settings → Stalls → edit, "What this stall costs": stall fee, travel,
+    helper, any other; stored with the stall, never on a bill). Profit = takings after offers − cost of the goods sold
+    − stall costs. The cost price used is today's, applied to every past bill. Products with no cost price are left
+    out and the profit is marked with a * as incomplete. Products & money gains Cost, Profit and Margin columns, a
+    "Most profit" sort and the same columns in its CSV once any cost price is set.
+- How numbers are shown (Sales, Insights, Products & money): colour says what a number
+  means for the shop, not just its sign. Red (`--color-loss`) is money going out
+  (offers, or a product selling below its list price) and always keeps its "−" so
+  colour is never the only cue; green (`--color-gain`) marks improvement; plain totals
+  stay in ink or maroon. Zeros show as a faint "—". Figures use `.num` (tabular, lining
+  digits) so rupees line up in columns. Big amounts shorten to "₹1.22 L" on phone cards
+  (`Amount`, `inrCompact`); a sliver of a share reads "<1%" instead of "0%" (`shareText`).
+  Wide tables keep their first column pinned when scrolled sideways.
+- Products & money, more: **Price realised** (collected per piece as a share of the list
+  price; red = given away), **concentration** ("Top 3 = X%") with **A / B / C** tags
+  (A products bring the first 80% of takings, B the next 15%), and a **Products CSV**.
+- Products & money charts (`src/components/charts.tsx`, plain SVG, no chart library; each
+  measures its own width so text stays readable on a phone): **Where your takings come
+  from** (Pareto: biggest products first, the running total, and a line where 80% is
+  reached), **Money given away** (each product's takings before offers, split into kept
+  and given away), **Share by category** (donut), **Price and volume** (each product by
+  average price and pieces sold, bubble size = money earned, dashed lines at your
+  averages, so cheap-and-popular and pricey-and-slow stand apart) and **Takings by day**
+  (stacked by category). Every shape has a tooltip with its exact figure.

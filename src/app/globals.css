@@ -16,6 +16,12 @@
   --color-cream: #fbf3ea;
   --color-ink: #261a1c;
 
+  /* Money going out (offers, below average) and money coming in (above average).
+     Plain totals stay in ink or maroon; colour is for what deviates. The red is
+     brighter than the brand maroon so a negative never reads as a heading. */
+  --color-loss: #c0392b;
+  --color-gain: #1f7a4d;
+
   --font-display: var(--font-marcellus), "Marcellus", serif;
   --font-script: var(--font-shivaraja), var(--font-yatra), cursive;
   --font-body: var(--font-jost), ui-sans-serif, system-ui, sans-serif;
@@ -44,4 +50,10 @@ body {
   /* A till is tapped, not zoomed. Without this iPad Safari waits to see whether
      a second tap is a double-tap-to-zoom before it reports the first. */
   touch-action: manipulation;
+}
+
+/* Digits the same width, so rupees line up down a column; lining figures, so none
+   of them drop below the line. Use on any number in a table or a row of totals. */
+.num {
+  font-variant-numeric: tabular-nums lining-nums;
 }

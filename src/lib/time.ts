@@ -95,12 +95,3 @@ export function prettyTime(iso: string): string {
     .format(new Date(iso))
     .toUpperCase();
 }
-
-/** The hour of the day (0 to 23) in India time, for "when is it busy". */
-export function hourOf(iso: string): number {
-  return Number(parts(new Date(iso), { hour: "2-digit" }).hour);
-}
-
-/** 15 -> "3 PM", 0 -> "12 AM". */
-export const hourLabel = (h: number) =>
-  `${h % 12 === 0 ? 12 : h % 12} ${h < 12 ? "AM" : "PM"}`;

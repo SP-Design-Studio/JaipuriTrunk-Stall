@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react";
 import type { Catalog } from "@/lib/catalog";
 import { receiptBase } from "@/lib/receiptBase";
-import Insights from "./Insights";
-import ProductMoney from "./ProductMoney";
+import Amount from "./Amount";
+import { Money, Offer } from "./figures";
+import { FilterBar, useSalesFilter } from "./useSalesFilter";
 import { describe, reviewState } from "@/lib/reviewState";
 import type { Review, ReviewStatus, StallEntry } from "@/lib/types";
 import { itemsToCsv, salesToCsv } from "@/lib/csv";
@@ -16,7 +17,7 @@ import {
   waLink,
   type Templates,
 } from "@/lib/messages";
-import { inr, variantOf } from "@/lib/money";
+import { inr, shareText, variantOf } from "@/lib/money";
 import {
   dayKey,
   prettyDate,
@@ -69,49 +70,15 @@ export default function Sales({
   onEditPhone: (sale: Sale) => void;
   onOpen: (sale: Sale) => void;
 }) {
-  const [range, setRange] = useState<"today" | "all">("today");
   const [view, setView] = useState<
-    | "log"
-    | "sold"
-    | "money"
-    | "days"
-    | "stalls"
-    | "stock"
-    | "reviews"
-    | "insights"
-    | "people"
+    "log" | "sold" | "days" | "stalls" | "stock" | "reviews" | "people"
   >("log");
   const [verifying, setVerifying] = useState(false);
-  const [stallFilter, setStallFilter] = useState("all");
   const [exporting, setExporting] = useState(false);
   const toast = useToast();
 
-  const stallNames = useMemo(
-    () =>
-      [...new Set(sales.map((s) => s.stall?.name).filter(Boolean))] as string[],
-    [sales],
-  );
-  // The dropdown lists every stall that has bills, and the current one even
-  // before its first bill, so choosing "This stall" always has an entry.
-  const stallOptions = useMemo(
-    () => [
-      ...new Set([
-        ...stalls.map((x) => x.name),
-        ...stallNames,
-        ...(currentStall ? [currentStall] : []),
-      ]),
-    ],
-    [stalls, stallNames, currentStall],
-  );
-  const shown = useMemo(
-    () =>
-      sales.filter(
-        (s) =>
-          (range === "all" || dayKey(s.createdAt) === todayKey()) &&
-          (stallFilter === "all" || s.stall?.name === stallFilter),
-      ),
-    [sales, range, stallFilter],
-  );
+  const filter = useSalesFilter(sales, stalls, currentStall);
+  const { range, setRange, stallFilter, setStallFilter, shown } = filter;
 
   const stats = useMemo(() => {
     const by = (m: string) =>
@@ -302,7 +269,7 @@ export default function Sales({
     return [...by.values()].sort((a, b) => b.key.localeCompare(a.key));
   }, [shown]);
 
-  const kpi = (title: string, value: string, sub?: string) => (
+  const kpi = (title: string, value: React.ReactNode, sub?: string) => (
     <div className="border-maroon/15 border bg-white/50 p-4">
       <div className="text-olive/80 text-xs tracking-[0.18em] uppercase">
         {title}
@@ -321,56 +288,7 @@ export default function Sales({
     <div className="min-h-0 flex-1 overflow-y-auto p-4">
       <div className="mx-auto max-w-5xl space-y-4 pb-8">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                setRange("today");
-                setStallFilter("all");
-              }}
-              className={tab(range === "today" && stallFilter === "all")}
-            >
-              Today
-            </button>
-            <button
-              onClick={() => {
-                setRange("all");
-                setStallFilter("all");
-              }}
-              className={tab(range === "all" && stallFilter === "all")}
-            >
-              All sales
-            </button>
-            {currentStall && (
-              <button
-                onClick={() => {
-                  setStallFilter(currentStall);
-                  setRange("all");
-                }}
-                className={tab(range === "all" && stallFilter === currentStall)}
-              >
-                This stall
-              </button>
-            )}
-            {stallOptions.length > 0 && (
-              <select
-                value={stallFilter}
-                onChange={(e) => {
-                  setStallFilter(e.target.value);
-                  // Looking at a past stall means looking at all of its days.
-                  if (e.target.value !== "all") setRange("all");
-                }}
-                aria-label="Filter by stall"
-                className="border-maroon/25 text-maroon min-h-11 border bg-white/70 px-3 text-sm"
-              >
-                <option value="all">All stalls</option>
-                {stallOptions.map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
+          <FilterBar filter={filter} />
           <div className="flex gap-2">
             <button
               onClick={() => setExporting(true)}
@@ -414,19 +332,25 @@ export default function Sales({
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
           {kpi(
             "Takings",
-            inr(stats.revenue),
+            <Amount n={stats.revenue} />,
             `${stats.count} ${stats.count === 1 ? "bill" : "bills"}`,
           )}
           {kpi("Items sold", String(stats.units), "pieces handed over")}
-          {kpi("UPI", inr(stats.upi))}
-          {kpi("Cash", inr(stats.cash), "to be in the box")}
-          {kpi("Average bill", inr(stats.average))}
+          {kpi("UPI", <Amount n={stats.upi} />)}
+          {kpi("Cash", <Amount n={stats.cash} />, "to be in the box")}
+          {kpi("Average bill", <Amount n={stats.average} />)}
           {kpi(
             "Offers given",
-            inr(stats.offers),
+            stats.offers > 0 ? (
+              <span className="text-loss">
+                −<Amount n={stats.offers} />
+              </span>
+            ) : (
+              <span className="text-ink/30">—</span>
+            ),
             stats.offerBills === 0
               ? "no offers"
-              : `${stats.offerBills} of ${stats.count} ${stats.count === 1 ? "bill" : "bills"} · ${Math.round((stats.offers / (stats.gross || 1)) * 100)}% of sales`,
+              : `${stats.offerBills} of ${stats.count} ${stats.count === 1 ? "bill" : "bills"} · ${shareText(stats.offers, stats.gross)} of sales`,
           )}
         </div>
 
@@ -442,12 +366,6 @@ export default function Sales({
             className={tab(view === "sold")}
           >
             What sold
-          </button>
-          <button
-            onClick={() => setView("money")}
-            className={tab(view === "money")}
-          >
-            Products &amp; money
           </button>
           <button
             onClick={() => setView("stock")}
@@ -468,12 +386,6 @@ export default function Sales({
             {shownReviews.length > 0 && (
               <span className="text-ink/50 ml-1">({shownReviews.length})</span>
             )}
-          </button>
-          <button
-            onClick={() => setView("insights")}
-            className={tab(view === "insights")}
-          >
-            Insights
           </button>
           <button
             onClick={() => setView("stalls")}
@@ -573,7 +485,7 @@ export default function Sales({
                       <div className="ml-auto w-28 shrink-0 text-right sm:ml-0 sm:w-32">
                         {s.discountAmount > 0 ? (
                           <>
-                            <div className="text-sm font-semibold text-emerald-700">
+                            <div className="num text-loss text-sm font-semibold">
                               −{inr(s.discountAmount)}
                             </div>
                             <div className="text-ink/45 text-xs">
@@ -880,12 +792,6 @@ export default function Sales({
           </>
         )}
 
-        {view === "money" && <ProductMoney sales={shown} catalog={catalog} />}
-
-        {view === "insights" && (
-          <Insights sales={shown} allSales={sales} reviews={reviewMap} />
-        )}
-
         {view === "stalls" &&
           (stallRows.length === 0 ? (
             empty("No bills yet.")
@@ -895,20 +801,26 @@ export default function Sales({
                 <table className="w-full min-w-[46rem] text-left text-sm">
                   <thead className="text-olive/80 border-maroon/15 border-b text-xs tracking-[0.14em] uppercase">
                     <tr>
-                      <th className="px-4 py-3 font-normal">Stall</th>
+                      <th className="sticky left-0 z-10 bg-[#fdf9f4] px-4 py-3 font-normal">
+                        Stall
+                      </th>
                       <th className="px-4 py-3 font-normal">Dates</th>
-                      <th className="px-4 py-3 text-right font-normal">
+                      <th className="num px-4 py-3 text-right font-normal">
                         Bills
                       </th>
-                      <th className="px-4 py-3 text-right font-normal">
+                      <th className="num px-4 py-3 text-right font-normal">
                         Items
                       </th>
-                      <th className="px-4 py-3 text-right font-normal">UPI</th>
-                      <th className="px-4 py-3 text-right font-normal">Cash</th>
-                      <th className="px-4 py-3 text-right font-normal">
+                      <th className="num px-4 py-3 text-right font-normal">
+                        UPI
+                      </th>
+                      <th className="num px-4 py-3 text-right font-normal">
+                        Cash
+                      </th>
+                      <th className="num px-4 py-3 text-right font-normal">
                         Discounts
                       </th>
-                      <th className="px-4 py-3 text-right font-normal">
+                      <th className="num px-4 py-3 text-right font-normal">
                         Takings
                       </th>
                     </tr>
@@ -925,7 +837,7 @@ export default function Sales({
                         }}
                         className="hover:bg-petal/60 cursor-pointer"
                       >
-                        <td className="px-4 py-3">
+                        <td className="sticky left-0 z-10 bg-[#fdf9f4] px-4 py-3">
                           <span className="font-semibold">
                             {r.name || "No stall"}
                           </span>
@@ -949,14 +861,18 @@ export default function Sales({
                               : `${r.days.size} day${r.days.size === 1 ? "" : "s"}`}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-right">{r.bills}</td>
-                        <td className="px-4 py-3 text-right">{r.units}</td>
-                        <td className="px-4 py-3 text-right">{inr(r.upi)}</td>
-                        <td className="px-4 py-3 text-right">{inr(r.cash)}</td>
-                        <td className="px-4 py-3 text-right">
-                          {inr(r.discount)}
+                        <td className="num px-4 py-3 text-right">{r.bills}</td>
+                        <td className="num px-4 py-3 text-right">{r.units}</td>
+                        <td className="num px-4 py-3 text-right">
+                          <Money n={r.upi} />
                         </td>
-                        <td className="text-maroon px-4 py-3 text-right font-semibold">
+                        <td className="num px-4 py-3 text-right">
+                          <Money n={r.cash} />
+                        </td>
+                        <td className="num px-4 py-3 text-right">
+                          <Offer n={r.discount} />
+                        </td>
+                        <td className="text-maroon num px-4 py-3 text-right font-semibold">
                           {inr(r.total)}
                         </td>
                       </tr>
@@ -967,22 +883,24 @@ export default function Sales({
                       <td className="px-4 py-3" colSpan={2}>
                         All stalls
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="num px-4 py-3 text-right">
                         {stallRows.reduce((n, r) => n + r.bills, 0)}
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="num px-4 py-3 text-right">
                         {stallRows.reduce((n, r) => n + r.units, 0)}
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        {inr(stallRows.reduce((n, r) => n + r.upi, 0))}
+                      <td className="num px-4 py-3 text-right">
+                        <Money n={stallRows.reduce((n, r) => n + r.upi, 0)} />
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        {inr(stallRows.reduce((n, r) => n + r.cash, 0))}
+                      <td className="num px-4 py-3 text-right">
+                        <Money n={stallRows.reduce((n, r) => n + r.cash, 0)} />
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        {inr(stallRows.reduce((n, r) => n + r.discount, 0))}
+                      <td className="num px-4 py-3 text-right">
+                        <Offer
+                          n={stallRows.reduce((n, r) => n + r.discount, 0)}
+                        />
                       </td>
-                      <td className="text-maroon px-4 py-3 text-right">
+                      <td className="text-maroon num px-4 py-3 text-right">
                         {inr(stallRows.reduce((n, r) => n + r.total, 0))}
                       </td>
                     </tr>
@@ -1004,27 +922,43 @@ export default function Sales({
               <table className="w-full min-w-[34rem] text-left text-sm">
                 <thead className="text-olive/80 border-maroon/15 border-b text-xs tracking-[0.14em] uppercase">
                   <tr>
-                    <th className="px-4 py-3 font-normal">Day</th>
-                    <th className="px-4 py-3 text-right font-normal">Bills</th>
-                    <th className="px-4 py-3 text-right font-normal">UPI</th>
-                    <th className="px-4 py-3 text-right font-normal">Cash</th>
-                    <th className="px-4 py-3 text-right font-normal">
+                    <th className="sticky left-0 z-10 bg-[#fdf9f4] px-4 py-3 font-normal">
+                      Day
+                    </th>
+                    <th className="num px-4 py-3 text-right font-normal">
+                      Bills
+                    </th>
+                    <th className="num px-4 py-3 text-right font-normal">
+                      UPI
+                    </th>
+                    <th className="num px-4 py-3 text-right font-normal">
+                      Cash
+                    </th>
+                    <th className="num px-4 py-3 text-right font-normal">
                       Discounts
                     </th>
-                    <th className="px-4 py-3 text-right font-normal">Total</th>
+                    <th className="num px-4 py-3 text-right font-normal">
+                      Total
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-maroon/10 divide-y">
                   {days.map((d) => (
                     <tr key={d.key}>
-                      <td className="px-4 py-3">{d.label}</td>
-                      <td className="px-4 py-3 text-right">{d.bills}</td>
-                      <td className="px-4 py-3 text-right">{inr(d.upi)}</td>
-                      <td className="px-4 py-3 text-right">{inr(d.cash)}</td>
-                      <td className="px-4 py-3 text-right">
-                        {inr(d.discount)}
+                      <td className="sticky left-0 z-10 bg-[#fdf9f4] px-4 py-3">
+                        {d.label}
                       </td>
-                      <td className="text-maroon px-4 py-3 text-right font-semibold">
+                      <td className="num px-4 py-3 text-right">{d.bills}</td>
+                      <td className="num px-4 py-3 text-right">
+                        <Money n={d.upi} />
+                      </td>
+                      <td className="num px-4 py-3 text-right">
+                        <Money n={d.cash} />
+                      </td>
+                      <td className="num px-4 py-3 text-right">
+                        <Offer n={d.discount} />
+                      </td>
+                      <td className="text-maroon num px-4 py-3 text-right font-semibold">
                         {inr(d.total)}
                       </td>
                     </tr>
@@ -1033,13 +967,17 @@ export default function Sales({
                 <tfoot className="border-maroon/30 border-t-2 font-semibold">
                   <tr>
                     <td className="px-4 py-3">All days</td>
-                    <td className="px-4 py-3 text-right">{stats.count}</td>
-                    <td className="px-4 py-3 text-right">{inr(stats.upi)}</td>
-                    <td className="px-4 py-3 text-right">{inr(stats.cash)}</td>
-                    <td className="px-4 py-3 text-right">
-                      {inr(days.reduce((n, d) => n + d.discount, 0))}
+                    <td className="num px-4 py-3 text-right">{stats.count}</td>
+                    <td className="num px-4 py-3 text-right">
+                      <Money n={stats.upi} />
                     </td>
-                    <td className="text-maroon px-4 py-3 text-right">
+                    <td className="num px-4 py-3 text-right">
+                      <Money n={stats.cash} />
+                    </td>
+                    <td className="num px-4 py-3 text-right">
+                      <Offer n={days.reduce((n, d) => n + d.discount, 0)} />
+                    </td>
+                    <td className="text-maroon num px-4 py-3 text-right">
                       {inr(stats.revenue)}
                     </td>
                   </tr>

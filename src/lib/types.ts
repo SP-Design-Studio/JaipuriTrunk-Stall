@@ -43,8 +43,14 @@ export type Stall = {
   to?: string;
 };
 
-/** A stall in the list staff choose from in Settings. */
-export type StallEntry = Stall & { id: string };
+/** One thing a stall cost to run: its fee, travel, a helper. Whole rupees. */
+export type StallCost = { label: string; amount: number };
+
+/**
+ * A stall in the list staff choose from in Settings. The costs live here and not
+ * on `Stall`, so the copy printed on every bill never carries them.
+ */
+export type StallEntry = Stall & { id: string; costs?: StallCost[] };
 
 /** What the till sends. Totals are deliberately absent: the server owns them. */
 export type SaleInput = {
