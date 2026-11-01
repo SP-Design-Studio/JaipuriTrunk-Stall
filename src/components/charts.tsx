@@ -107,11 +107,14 @@ export function ParetoChart({
   total: number;
 }) {
   const [ref, width] = useWidth();
+  const [open, setOpen] = useState(false);
   const w = width || 320;
-  // The biggest dozen get a row each; the rest are rolled into one.
+  // The biggest dozen get a row each; the rest are rolled into one, which can be
+  // opened to show every product.
   const sorted = [...products].sort((a, b) => b.net - a.net);
-  const shown = sorted.slice(0, 12);
-  const rest = sorted.slice(12);
+  const shown = open ? sorted : sorted.slice(0, 12);
+  const rest = open ? [] : sorted.slice(12);
+  const hidden = Math.max(sorted.length - 12, 0);
   const rows = rest.length
     ? [
         ...shown,
@@ -211,6 +214,15 @@ export function ParetoChart({
           </g>
         )}
       </svg>
+      {hidden > 0 && (
+        <button
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="border-maroon/25 text-maroon hover:bg-petal mt-2 min-h-11 border px-4 text-sm"
+        >
+          {open ? "Show fewer" : `Show all ${hidden} others`}
+        </button>
+      )}
     </div>
   );
 }
