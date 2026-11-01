@@ -5,6 +5,7 @@ import type { Catalog } from "@/lib/catalog";
 import { receiptBase } from "@/lib/receiptBase";
 import Amount from "./Amount";
 import { Money, Offer } from "./figures";
+import ProfitCards from "./ProfitCards";
 import { FilterBar, useSalesFilter } from "./useSalesFilter";
 import { describe, reviewState } from "@/lib/reviewState";
 import type { Review, ReviewStatus, StallEntry } from "@/lib/types";
@@ -329,7 +330,7 @@ export default function Sales({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           {kpi(
             "Takings",
             <Amount n={stats.revenue} />,
@@ -352,6 +353,12 @@ export default function Sales({
               ? "no offers"
               : `${stats.offerBills} of ${stats.count} ${stats.count === 1 ? "bill" : "bills"} · ${shareText(stats.offers, stats.gross)} of sales`,
           )}
+          <ProfitCards
+            shown={shown}
+            sales={sales}
+            stalls={stalls}
+            catalog={catalog}
+          />
         </div>
 
         <div className="flex flex-wrap gap-2">

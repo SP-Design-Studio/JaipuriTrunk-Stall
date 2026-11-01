@@ -9,6 +9,7 @@ import StallsView from "./StallsView";
 import TrendView from "./TrendView";
 import { stallStats } from "@/lib/stallStats";
 import ProductMoney from "./ProductMoney";
+import ProfitCards from "./ProfitCards";
 import { FilterBar, useSalesFilter } from "./useSalesFilter";
 
 const tab = (on: boolean) =>
@@ -57,6 +58,16 @@ export default function Analysis({
     <div className="min-h-0 flex-1 overflow-y-auto p-4">
       <div className="mx-auto max-w-5xl space-y-4 pb-8">
         {!allStalls && <FilterBar filter={filter} />}
+        {!allStalls && (
+          <div className="grid grid-cols-2 gap-3 md:max-w-xl">
+            <ProfitCards
+              shown={shown}
+              sales={sales}
+              stalls={stalls}
+              catalog={catalog}
+            />
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setView("money")}
