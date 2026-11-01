@@ -172,3 +172,25 @@ This is a note for the owner, not legal advice; confirm with your CA.
   and a country code), and can also fix every other bill carrying the same old
   number. A customer who agreed to be messaged can't have their number removed.
   No database change.
+- Offers analysis (Sales): an **Offers given** card at the top (total knocked off, how
+  many bills had an offer, and that as a share of sales at full price), and an
+  **Offer given** column in the Bills list showing each bill's amount and how it was
+  given (% off, flat amount, rounded to ₹10). Takings are after offers, so Takings
+  + Offers = sales at full price. It follows the same Today / All / stall filter,
+  and is display only: nothing stored or calculated elsewhere changed.
+- Sales → Insights: a read-only analysis of the bills in the current list (it follows
+  the Today / All / stall filter): how people pay (UPI vs cash share), offers (average
+  bill with vs without one, and how offers were given), busiest hours (India time),
+  the typical basket (items per bill, bill-size spread, biggest bill), who comes back
+  (returning customers matched by phone across all bills, their share of takings,
+  top customers), which sizes and colours sell, and how well contact details and
+  reviews are being collected. It only reads what bills already store: no database
+  change, nothing written, and no other screen changed.
+- Sales → Products & money: what each product earned, after offers. A bill's offer is
+  spread over its items in proportion to what each came to (in whole rupees, adding
+  back exactly), so every product's **Net** adds up to Takings to the rupee; **Before
+  offers** is the figure the "What sold" tab shows. Per product: pieces, before offers,
+  offers, net, average per piece and share of takings (sort by money, pieces or price),
+  then totals by category, by price point, money by size and by colour, and the
+  products that did not sell in the current list. Read-only; follows the Today / All /
+  stall filter; no database change. Logic in `src/lib/productMoney.ts`.

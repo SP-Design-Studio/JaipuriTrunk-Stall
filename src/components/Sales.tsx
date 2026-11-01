@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import type { Catalog } from "@/lib/catalog";
 import { receiptBase } from "@/lib/receiptBase";
+import Insights from "./Insights";
+import ProductMoney from "./ProductMoney";
 import { describe, reviewState } from "@/lib/reviewState";
 import type { Review, ReviewStatus, StallEntry } from "@/lib/types";
 import { itemsToCsv, salesToCsv } from "@/lib/csv";
@@ -69,7 +71,15 @@ export default function Sales({
 }) {
   const [range, setRange] = useState<"today" | "all">("today");
   const [view, setView] = useState<
-    "log" | "sold" | "days" | "stalls" | "stock" | "reviews" | "people"
+    | "log"
+    | "sold"
+    | "money"
+    | "days"
+    | "stalls"
+    | "stock"
+    | "reviews"
+    | "insights"
+    | "people"
   >("log");
   const [verifying, setVerifying] = useState(false);
   const [stallFilter, setStallFilter] = useState("all");
@@ -117,6 +127,12 @@ export default function Sales({
       upi: by("UPI"),
       cash: by("Cash"),
       average: shown.length ? Math.round(revenue / shown.length) : 0,
+      // Offers: what was knocked off, on how many bills, against what the bills
+      // came to before any offer. Takings are after offers, so Takings + Offers
+      // = the sales at full price.
+      offers: shown.reduce((n, s) => n + s.discountAmount, 0),
+      offerBills: shown.filter((s) => s.discountAmount > 0).length,
+      gross: shown.reduce((n, s) => n + s.subtotal, 0),
     };
   }, [shown]);
 
@@ -395,7 +411,7 @@ export default function Sales({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
           {kpi(
             "Takings",
             inr(stats.revenue),
@@ -405,6 +421,13 @@ export default function Sales({
           {kpi("UPI", inr(stats.upi))}
           {kpi("Cash", inr(stats.cash), "to be in the box")}
           {kpi("Average bill", inr(stats.average))}
+          {kpi(
+            "Offers given",
+            inr(stats.offers),
+            stats.offerBills === 0
+              ? "no offers"
+              : `${stats.offerBills} of ${stats.count} ${stats.count === 1 ? "bill" : "bills"} · ${Math.round((stats.offers / (stats.gross || 1)) * 100)}% of sales`,
+          )}
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -419,6 +442,12 @@ export default function Sales({
             className={tab(view === "sold")}
           >
             What sold
+          </button>
+          <button
+            onClick={() => setView("money")}
+            className={tab(view === "money")}
+          >
+            Products &amp; money
           </button>
           <button
             onClick={() => setView("stock")}
@@ -439,6 +468,12 @@ export default function Sales({
             {shownReviews.length > 0 && (
               <span className="text-ink/50 ml-1">({shownReviews.length})</span>
             )}
+          </button>
+          <button
+            onClick={() => setView("insights")}
+            className={tab(view === "insights")}
+          >
+            Insights
           </button>
           <button
             onClick={() => setView("stalls")}
@@ -486,53 +521,82 @@ export default function Sales({
               )
             )
           ) : (
-            <ul className={list}>
-              {shown.map((s) => (
-                <li key={s.id}>
-                  <button
-                    onClick={() => onOpen(s)}
-                    className="hover:bg-petal/60 flex min-h-16 w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left sm:flex-nowrap"
-                  >
-                    <div className="w-full shrink-0 sm:w-52">
-                      <div className="text-sm font-semibold">{s.invoiceNo}</div>
-                      <div className="text-ink/45 text-xs">
-                        {range === "all" ? `${prettyDate(s.createdAt)}, ` : ""}
-                        {prettyTime(s.createdAt)}
-                        {s.stall ? ` · ${s.stall.name}` : ""}
+            <>
+              <div className="text-olive/80 hidden gap-x-4 px-4 text-[11px] tracking-[0.14em] uppercase sm:flex">
+                <div className="w-52 shrink-0">Bill</div>
+                <div className="flex-1">Customer</div>
+                <div className="w-32 shrink-0 text-right">Offer given</div>
+                <div className="w-20 shrink-0 text-right">Total</div>
+              </div>
+              <ul className={list}>
+                {shown.map((s) => (
+                  <li key={s.id}>
+                    <button
+                      onClick={() => onOpen(s)}
+                      className="hover:bg-petal/60 flex min-h-16 w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left sm:flex-nowrap"
+                    >
+                      <div className="w-full shrink-0 sm:w-52">
+                        <div className="text-sm font-semibold">
+                          {s.invoiceNo}
+                        </div>
+                        <div className="text-ink/45 text-xs">
+                          {range === "all"
+                            ? `${prettyDate(s.createdAt)}, `
+                            : ""}
+                          {prettyTime(s.createdAt)}
+                          {s.stall ? ` · ${s.stall.name}` : ""}
+                        </div>
                       </div>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm">
-                        {s.customerName || "Walk-in"}
-                        <ReviewBadge
-                          state={reviewState(s, reviewMap, statusMap)}
-                        />
-                        {s.customerPhone && (
-                          <span className="text-ink/45">
-                            {" "}
-                            · {s.customerPhone}
-                          </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm">
+                          {s.customerName || "Walk-in"}
+                          <ReviewBadge
+                            state={reviewState(s, reviewMap, statusMap)}
+                          />
+                          {s.customerPhone && (
+                            <span className="text-ink/45">
+                              {" "}
+                              · {s.customerPhone}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-ink/50 truncate text-xs">
+                          {s.lines
+                            .map(
+                              (l) =>
+                                `${l.name}${variantOf(l) ? ` (${variantOf(l)})` : ""} ×${l.qty}`,
+                            )
+                            .join(", ")}
+                        </div>
+                      </div>
+                      {/* What was knocked off this bill, and how. */}
+                      <div className="ml-auto w-28 shrink-0 text-right sm:ml-0 sm:w-32">
+                        {s.discountAmount > 0 ? (
+                          <>
+                            <div className="text-sm font-semibold text-emerald-700">
+                              −{inr(s.discountAmount)}
+                            </div>
+                            <div className="text-ink/45 text-xs">
+                              {offerLabel(s.discount)}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="text-ink/30 text-sm">—</div>
                         )}
                       </div>
-                      <div className="text-ink/50 truncate text-xs">
-                        {s.lines
-                          .map(
-                            (l) =>
-                              `${l.name}${variantOf(l) ? ` (${variantOf(l)})` : ""} ×${l.qty}`,
-                          )
-                          .join(", ")}
+                      <div className="w-20 shrink-0 text-right">
+                        <div className="text-maroon text-sm font-semibold">
+                          {inr(s.total)}
+                        </div>
+                        <div className="text-ink/45 text-xs">
+                          {s.paymentMode}
+                        </div>
                       </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-maroon text-sm font-semibold">
-                        {inr(s.total)}
-                      </div>
-                      <div className="text-ink/45 text-xs">{s.paymentMode}</div>
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
           ))}
 
         {view === "sold" &&
@@ -816,6 +880,12 @@ export default function Sales({
           </>
         )}
 
+        {view === "money" && <ProductMoney sales={shown} catalog={catalog} />}
+
+        {view === "insights" && (
+          <Insights sales={shown} allSales={sales} reviews={reviewMap} />
+        )}
+
         {view === "stalls" &&
           (stallRows.length === 0 ? (
             empty("No bills yet.")
@@ -1062,4 +1132,18 @@ function ReviewBadge({ state }: { state: ReturnType<typeof reviewState> }) {
       </span>
     );
   return null;
+}
+
+/** How an offer was given, for the Bills list. */
+function offerLabel(d: Sale["discount"]): string {
+  switch (d.kind) {
+    case "pct":
+      return `${d.value}% off`;
+    case "flat":
+      return "Flat amount off";
+    case "round10":
+      return "Rounded to ₹10";
+    default:
+      return "";
+  }
 }
