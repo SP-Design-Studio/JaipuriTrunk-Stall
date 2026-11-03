@@ -216,6 +216,12 @@ This is a note for the owner, not legal advice; confirm with your CA.
     − stall costs. The cost price used is today's, applied to every past bill. Products with no cost price are left
     out and the profit is marked with a * as incomplete. Products & money gains Cost, Profit and Margin columns, a
     "Most profit" sort and the same columns in its CSV once any cost price is set.
+- When the till sits untouched for `POS_SESSION_MINUTES` (default 5), it locks: a "Signed out" screen
+  covers everything, so no sales, customer numbers or stall figures stay on show. The till checks
+  `/api/session` every 20 seconds and whenever the tab comes back, so an unattended till locks by
+  itself. Taps, keys and scrolling count as use and renew the session, so it only locks when left alone. The register is hidden, not thrown away, so a bill being rung up (or a sale that had not
+  saved) is still there after signing in again on that screen. Being offline does not lock it; only a
+  real "signed out" answer does.
 - How numbers are shown (Sales, Insights, Products & money): colour says what a number
   means for the shop, not just its sign. Red (`--color-loss`) is money going out
   (offers, or a product selling below its list price) and always keeps its "−" so

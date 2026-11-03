@@ -13,10 +13,12 @@ import ReceiptSheet from "./ReceiptSheet";
 import Register from "./Register";
 import Analysis from "./Analysis";
 import Sales from "./Sales";
+import SessionExpired from "./SessionExpired";
 import { ToastProvider, useToast } from "./Toasts";
 import { useCatalog } from "./useCatalog";
 import { useStalls } from "./useStalls";
 import { useReviews } from "./useReviews";
+import { useSessionWatch } from "./useSessionWatch";
 import { useStock } from "./useStock";
 import { useSales, type SaveResult } from "./useSales";
 
@@ -63,6 +65,8 @@ function PosScreen() {
   // The bill whose phone number is being corrected, if the form is open.
   const [editingPhone, setEditingPhone] = useState<Sale | null>(null);
   const reviewsApi = useReviews();
+  // A session that has timed out locks the whole till (see SessionExpired).
+  const session = useSessionWatch(conn === "signedOut");
   const [view, setView] = useState<
     "register" | "sales" | "analysis" | "items" | "settings"
   >("register");
@@ -201,236 +205,239 @@ function PosScreen() {
       on ? "bg-petal text-maroon-deep" : "text-petal/80 hover:text-petal"
     }`;
 
+  /** After signing in again, pick up anything that changed while locked. */
+  function onSignedIn() {
+    session.signedIn();
+    void refresh();
+    void stockApi.refresh();
+    void reviewsApi.refresh();
+  }
+
   return (
-    <div className="bg-cream text-ink fixed inset-0 flex flex-col overflow-clip">
-      <header className="bg-maroon-deep text-petal flex flex-wrap items-center justify-between gap-x-3 px-3 py-1 sm:grid sm:grid-cols-[1fr_auto_1fr] sm:px-4 sm:py-2">
-        {/* Three equal-weight columns on wider screens, so the menu sits in the
+    <>
+      {session.signedOut && <SessionExpired onSignedIn={onSignedIn} />}
+      <div
+        // Hidden and unreachable while locked, but still mounted, so a bill being
+        // rung up survives the sign-in.
+        inert={session.signedOut}
+        aria-hidden={session.signedOut}
+        className={`bg-cream text-ink fixed inset-0 flex flex-col overflow-clip ${session.signedOut ? "invisible" : ""}`}
+      >
+        <header className="bg-maroon-deep text-petal flex flex-wrap items-center justify-between gap-x-3 px-3 py-1 sm:grid sm:grid-cols-[1fr_auto_1fr] sm:px-4 sm:py-2">
+          {/* Three equal-weight columns on wider screens, so the menu sits in the
             exact middle whatever the widths of the name and the status on either side. */}
-        <div className="flex min-w-0 items-center gap-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/images/monogram-orange.png"
-            alt=""
-            className="h-9 w-auto sm:h-11"
-          />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/images/wordmark-orange.png"
-            alt={BUSINESS.name}
-            className="h-5 w-auto sm:h-6"
-          />
-          {stall ? (
-            <button
-              onClick={() => setView("settings")}
-              className="text-petal/80 hover:text-petal max-w-40 truncate text-xs tracking-[0.12em] uppercase underline-offset-4 hover:underline"
-              title="Current stall — tap to change in Settings"
-            >
-              {stall.name}
-            </button>
-          ) : (stallList.stalls?.length ?? 0) > 0 ? (
-            <button
-              onClick={() => setView("settings")}
-              className="max-w-40 truncate bg-amber-400 px-2 py-0.5 text-xs font-semibold text-amber-950"
-              title="Bills aren’t being recorded against any stall"
-            >
-              No stall started
-            </button>
-          ) : (
-            <span className="text-petal/60 hidden text-xs tracking-[0.2em] uppercase sm:inline">
-              Stall
-            </span>
-          )}
-        </div>
-
-        <nav
-          className="order-last flex w-full sm:order-none sm:w-auto sm:justify-self-center"
-          aria-label="Sections"
-        >
-          <button
-            onClick={() => setView("register")}
-            className={nav(view === "register")}
-          >
-            Register
-          </button>
-          <button
-            onClick={() => {
-              setView("sales");
-              void refresh();
-              void stockApi.refresh();
-              void reviewsApi.refresh();
-            }}
-            className={nav(view === "sales")}
-          >
-            Sales
-          </button>
-          <button
-            onClick={() => {
-              setView("analysis");
-              void refresh();
-              void reviewsApi.refresh();
-            }}
-            className={nav(view === "analysis")}
-          >
-            Analysis
-          </button>
-          <button
-            onClick={() => setView("items")}
-            className={nav(view === "items")}
-          >
-            Items
-          </button>
-          <button
-            onClick={() => setView("settings")}
-            className={nav(view === "settings")}
-          >
-            Settings
-          </button>
-        </nav>
-
-        <div className="flex items-center gap-1 sm:justify-self-end sm:gap-3">
-          <button
-            onClick={() =>
-              items.save.kind === "failed" ? items.retry() : void refresh()
-            }
-            className={`inline-flex min-h-11 items-center gap-2 text-xs ${status.warn ? "text-blush" : "text-petal/70"}`}
-            aria-label={`${status.text}. Tap to check again.`}
-          >
-            <span
-              className={`size-2 rounded-full ${status.warn ? "bg-blush" : "bg-sage"}`}
-              aria-hidden="true"
+          <div className="flex min-w-0 items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/images/monogram-orange.png"
+              alt=""
+              className="h-9 w-auto sm:h-11"
             />
-            <span className={status.warn ? "" : "hidden sm:inline"}>
-              {status.text}
-            </span>
-          </button>
-          <button
-            onClick={signOut}
-            className="text-petal/60 hover:text-petal min-h-11 px-1 text-xs"
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/images/wordmark-orange.png"
+              alt={BUSINESS.name}
+              className="h-5 w-auto sm:h-6"
+            />
+            {stall ? (
+              <button
+                onClick={() => setView("settings")}
+                className="text-petal/80 hover:text-petal max-w-40 truncate text-xs tracking-[0.12em] uppercase underline-offset-4 hover:underline"
+                title="Current stall — tap to change in Settings"
+              >
+                {stall.name}
+              </button>
+            ) : (stallList.stalls?.length ?? 0) > 0 ? (
+              <button
+                onClick={() => setView("settings")}
+                className="max-w-40 truncate bg-amber-400 px-2 py-0.5 text-xs font-semibold text-amber-950"
+                title="Bills aren’t being recorded against any stall"
+              >
+                No stall started
+              </button>
+            ) : (
+              <span className="text-petal/60 hidden text-xs tracking-[0.2em] uppercase sm:inline">
+                Stall
+              </span>
+            )}
+          </div>
+
+          <nav
+            className="order-last flex w-full sm:order-none sm:w-auto sm:justify-self-center"
+            aria-label="Sections"
           >
-            Sign out
-          </button>
-        </div>
-      </header>
+            <button
+              onClick={() => setView("register")}
+              className={nav(view === "register")}
+            >
+              Register
+            </button>
+            <button
+              onClick={() => {
+                setView("sales");
+                void refresh();
+                void stockApi.refresh();
+                void reviewsApi.refresh();
+              }}
+              className={nav(view === "sales")}
+            >
+              Sales
+            </button>
+            <button
+              onClick={() => {
+                setView("analysis");
+                void refresh();
+                void reviewsApi.refresh();
+              }}
+              className={nav(view === "analysis")}
+            >
+              Analysis
+            </button>
+            <button
+              onClick={() => setView("items")}
+              className={nav(view === "items")}
+            >
+              Items
+            </button>
+            <button
+              onClick={() => setView("settings")}
+              className={nav(view === "settings")}
+            >
+              Settings
+            </button>
+          </nav>
 
-      {conn === "signedOut" && (
-        <div
-          role="alert"
-          className="bg-blush/40 text-maroon-deep px-4 py-2 text-center text-sm"
-        >
-          Your session ended.{" "}
-          <a href="/login" className="font-semibold underline">
-            Sign in again
-          </a>{" "}
-          before ringing up anything else; a sale can’t be saved while signed
-          out.
-        </div>
-      )}
+          <div className="flex items-center gap-1 sm:justify-self-end sm:gap-3">
+            <button
+              onClick={() =>
+                items.save.kind === "failed" ? items.retry() : void refresh()
+              }
+              className={`inline-flex min-h-11 items-center gap-2 text-xs ${status.warn ? "text-blush" : "text-petal/70"}`}
+              aria-label={`${status.text}. Tap to check again.`}
+            >
+              <span
+                className={`size-2 rounded-full ${status.warn ? "bg-blush" : "bg-sage"}`}
+                aria-hidden="true"
+              />
+              <span className={status.warn ? "" : "hidden sm:inline"}>
+                {status.text}
+              </span>
+            </button>
+            <button
+              onClick={signOut}
+              className="text-petal/60 hover:text-petal min-h-11 px-1 text-xs"
+            >
+              Sign out
+            </button>
+          </div>
+        </header>
 
-      {/* The register stays mounted and is only hidden. Unmounting it threw away
+        {/* The register stays mounted and is only hidden. Unmounting it threw away
           a half-built bill the moment someone looked at Sales or fixed a price,
           and the bill is exactly what must survive a glance elsewhere. */}
-      <div
-        className={`${view === "register" ? "flex" : "hidden"} min-h-0 flex-1 flex-col`}
-      >
-        <Register
-          key={till}
-          catalog={items.catalog}
-          qr={qr.image}
-          stock={stockApi.stock}
-          stall={
-            stall
-              ? {
-                  name: stall.name,
-                  address: stall.address,
-                  phone: stall.phone,
-                  from: stall.from,
-                  to: stall.to,
-                }
-              : undefined
-          }
-          onSave={onSave}
-          onCheck={onCheck}
-        />
-      </div>
-      {view === "sales" && (
-        <Sales
-          sales={sales}
-          templates={templates.saved}
-          currentStall={stall?.name}
-          stalls={stallList.stalls ?? []}
-          catalog={items.catalog}
-          stock={stockApi.stock}
-          reviews={reviewsApi.reviews}
-          reviewStatuses={reviewsApi.statuses}
-          onEditPhone={setEditingPhone}
-          onReviewAsked={() => void reviewsApi.refresh()}
-          onOpen={(sale) => setReceipt({ sale, fresh: false })}
-        />
-      )}
-      {view === "analysis" && (
-        <Analysis
-          sales={sales}
-          catalog={items.catalog}
-          reviews={reviewsApi.reviews}
-          stalls={stallList.stalls ?? []}
-          currentStall={stall?.name}
-        />
-      )}
-      {view === "items" && (
-        <ManageItems
-          catalog={items.catalog}
-          status={items.save}
-          onChange={items.update}
-          onRetry={items.retry}
-          stock={stockApi.stock}
-          onStock={(id, q) => void stockApi.set(id, q)}
-        />
-      )}
-      {view === "settings" && (
-        <Settings
-          qr={qr}
-          stallList={stallList}
-          templates={templates}
-          sales={sales}
-          onWiped={clear}
-          onRestored={() => void refresh()}
-        />
-      )}
+        <div
+          className={`${view === "register" ? "flex" : "hidden"} min-h-0 flex-1 flex-col`}
+        >
+          <Register
+            key={till}
+            catalog={items.catalog}
+            qr={qr.image}
+            stock={stockApi.stock}
+            stall={
+              stall
+                ? {
+                    name: stall.name,
+                    address: stall.address,
+                    phone: stall.phone,
+                    from: stall.from,
+                    to: stall.to,
+                  }
+                : undefined
+            }
+            onSave={onSave}
+            onCheck={onCheck}
+          />
+        </div>
+        {view === "sales" && (
+          <Sales
+            sales={sales}
+            templates={templates.saved}
+            currentStall={stall?.name}
+            stalls={stallList.stalls ?? []}
+            catalog={items.catalog}
+            stock={stockApi.stock}
+            reviews={reviewsApi.reviews}
+            reviewStatuses={reviewsApi.statuses}
+            onEditPhone={setEditingPhone}
+            onReviewAsked={() => void reviewsApi.refresh()}
+            onOpen={(sale) => setReceipt({ sale, fresh: false })}
+          />
+        )}
+        {view === "analysis" && (
+          <Analysis
+            sales={sales}
+            catalog={items.catalog}
+            reviews={reviewsApi.reviews}
+            stalls={stallList.stalls ?? []}
+            currentStall={stall?.name}
+          />
+        )}
+        {view === "items" && (
+          <ManageItems
+            catalog={items.catalog}
+            status={items.save}
+            onChange={items.update}
+            onRetry={items.retry}
+            stock={stockApi.stock}
+            onStock={(id, q) => void stockApi.set(id, q)}
+          />
+        )}
+        {view === "settings" && (
+          <Settings
+            qr={qr}
+            stallList={stallList}
+            templates={templates}
+            sales={sales}
+            onWiped={clear}
+            onRestored={() => void refresh()}
+          />
+        )}
 
-      {receipt && (
-        <ReceiptSheet
-          key={receipt.sale.id}
-          sale={receipt.sale}
-          fresh={receipt.fresh}
-          templates={templates.saved}
-          onReviewAsked={() => void reviewsApi.refresh()}
-          onEditPhone={setEditingPhone}
-          onClose={closeReceipt}
-        />
-      )}
-      {editingPhone && (
-        <EditPhone
-          // The list may have moved on since the form opened: use its latest copy.
-          sale={sales.find((x) => x.id === editingPhone.id) ?? editingPhone}
-          sharedWith={
-            editingPhone.customerPhone
-              ? sales.filter(
-                  (x) =>
-                    x.id !== editingPhone.id &&
-                    x.customerPhone === editingPhone.customerPhone,
-                ).length
-              : 0
-          }
-          onSaved={(updated) => {
-            patch(updated);
-            // If this bill's receipt is open, show the corrected copy.
-            const mine = updated.find((u) => u.id === receipt?.sale.id);
-            if (mine && receipt) setReceipt({ ...receipt, sale: mine });
-            setEditingPhone(null);
-          }}
-          onClose={() => setEditingPhone(null)}
-        />
-      )}
-    </div>
+        {receipt && (
+          <ReceiptSheet
+            key={receipt.sale.id}
+            sale={receipt.sale}
+            fresh={receipt.fresh}
+            templates={templates.saved}
+            onReviewAsked={() => void reviewsApi.refresh()}
+            onEditPhone={setEditingPhone}
+            onClose={closeReceipt}
+          />
+        )}
+        {editingPhone && (
+          <EditPhone
+            // The list may have moved on since the form opened: use its latest copy.
+            sale={sales.find((x) => x.id === editingPhone.id) ?? editingPhone}
+            sharedWith={
+              editingPhone.customerPhone
+                ? sales.filter(
+                    (x) =>
+                      x.id !== editingPhone.id &&
+                      x.customerPhone === editingPhone.customerPhone,
+                  ).length
+                : 0
+            }
+            onSaved={(updated) => {
+              patch(updated);
+              // If this bill's receipt is open, show the corrected copy.
+              const mine = updated.find((u) => u.id === receipt?.sale.id);
+              if (mine && receipt) setReceipt({ ...receipt, sale: mine });
+              setEditingPhone(null);
+            }}
+            onClose={() => setEditingPhone(null)}
+          />
+        )}
+      </div>
+    </>
   );
 }

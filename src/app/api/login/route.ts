@@ -6,6 +6,7 @@ import {
   checkCredentials,
   issueSession,
   posConfigured,
+  sessionCookieOptions,
 } from "@/lib/session";
 
 export async function POST(request: Request) {
@@ -58,12 +59,10 @@ export async function POST(request: Request) {
   }
 
   const session = issueSession()!;
-  (await cookies()).set(SESSION_COOKIE, session.value, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: session.maxAge,
-  });
+  (await cookies()).set(
+    SESSION_COOKIE,
+    session.value,
+    sessionCookieOptions(session.maxAge),
+  );
   return NextResponse.json({ ok: true }, { headers: noStore });
 }

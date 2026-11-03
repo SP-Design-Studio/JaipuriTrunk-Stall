@@ -7,7 +7,8 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
  *   POS_EMAIL            who may sign in
  *   POS_PASSWORD         their password — compared, never stored or logged
  *   POS_SESSION_SECRET   32+ random characters; signs the cookie
- *   POS_SESSION_HOURS    optional, default 12
+ *   POS_SESSION_MINUTES  optional, how long the till may sit untouched before it
+ *                        locks (default 5). Using it keeps the session going.
  *
  * If any of the first three is missing the till refuses to open at all rather
  * than falling back to something guessable.
@@ -24,9 +25,10 @@ function creds() {
 
 export const posConfigured = () => creds() !== null;
 
-function hours() {
-  const n = Number(process.env.POS_SESSION_HOURS);
-  return Number.isFinite(n) && n > 0 && n <= 24 * 30 ? n : 12;
+/** Minutes a session lasts without being renewed. */
+function minutes() {
+  const n = Number(process.env.POS_SESSION_MINUTES);
+  return Number.isFinite(n) && n > 0 && n <= 60 * 24 * 30 ? n : 5;
 }
 
 const digest = (s: string) => createHash("sha256").update(s).digest();
@@ -69,7 +71,7 @@ export function issueSession(now = Date.now()) {
   const c = creds();
   if (!c) return null;
   const nowSec = Math.floor(now / 1000);
-  const exp = nowSec + Math.round(hours() * 3600);
+  const exp = nowSec + Math.max(Math.round(minutes() * 60), 1);
   return { value: `${exp}.${sign(exp, c)}`, maxAge: exp - nowSec };
 }
 
@@ -87,3 +89,12 @@ export function verifySession(
   const b = Buffer.from(sign(exp, c));
   return a.length === b.length && timingSafeEqual(a, b);
 }
+
+/** How the session cookie is set, in one place for signing in and for renewing. */
+export const sessionCookieOptions = (maxAge: number) => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax" as const,
+  path: "/",
+  maxAge,
+});
