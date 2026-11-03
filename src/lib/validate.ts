@@ -5,6 +5,7 @@ import {
   type Catalog,
   type CatalogCategory,
   type CatalogItem,
+  type SizeSet,
 } from "./catalog";
 import type {
   Discount,
@@ -233,6 +234,29 @@ export function parseCatalog(body: unknown): CatalogResult {
 
   const seen = new Set<string>();
   const claim = (id: string) => (seen.has(id) ? false : (seen.add(id), true));
+
+  // Named size options, shared by categories and items.
+  const rawSets = body.sizeSets === undefined ? [] : body.sizeSets;
+  if (!Array.isArray(rawSets) || rawSets.length > LIMITS.sizeSets)
+    return { ok: false, error: `At most ${LIMITS.sizeSets} size options.` };
+  const sizeSets: SizeSet[] = [];
+  for (const raw of rawSets) {
+    if (
+      !isObj(raw) ||
+      typeof raw.id !== "string" ||
+      !ID.test(raw.id) ||
+      !claim(raw.id) ||
+      !text(raw.name, LIMITS.setName) ||
+      raw.name.trim() === ""
+    )
+      return { ok: false, error: "A size option needs a name." };
+    const sizes = labels(raw.sizes, LIMITS.sizes, LIMITS.size);
+    if (!sizes) return { ok: false, error: "Size option sizes are invalid." };
+    sizeSets.push({ id: raw.id, name: raw.name.trim(), sizes });
+  }
+  // A choice that points at a size option that no longer exists is dropped.
+  const knownSet = (v: unknown) =>
+    typeof v === "string" && sizeSets.some((s) => s.id === v) ? v : undefined;
   let items = 0;
   const categories: CatalogCategory[] = [];
 
@@ -255,6 +279,7 @@ export function parseCatalog(body: unknown): CatalogResult {
         ? []
         : labels(rawCat.colors, LIMITS.colors, LIMITS.color);
     if (!colors) return { ok: false, error: "Colours are invalid." };
+    const catSet = knownSet(rawCat.sizeSet);
 
     if (!Array.isArray(rawCat.items))
       return { ok: false, error: "A category has no item list." };
@@ -279,6 +304,13 @@ export function parseCatalog(body: unknown): CatalogResult {
         !int(rawItem.cost, 1, 1_000_000)
       )
         return { ok: false, error: "A cost must be whole rupees, or empty." };
+      // Optional: absent means "use the category's sizes".
+      const ownSizes =
+        rawItem.sizes === undefined || rawItem.sizes === null
+          ? undefined
+          : labels(rawItem.sizes, LIMITS.sizes, LIMITS.size);
+      if (ownSizes === null)
+        return { ok: false, error: "An item's sizes are invalid." };
       if (
         rawItem.src !== undefined &&
         (typeof rawItem.src !== "string" || !SRC.test(rawItem.src))
@@ -289,6 +321,10 @@ export function parseCatalog(body: unknown): CatalogResult {
         name: rawItem.name.trim(),
         price: rawItem.price as number | null,
         ...(typeof rawItem.cost === "number" ? { cost: rawItem.cost } : {}),
+        ...(ownSizes ? { sizes: ownSizes } : {}),
+        ...(knownSet(rawItem.sizeSet)
+          ? { sizeSet: knownSet(rawItem.sizeSet) }
+          : {}),
         ...(typeof rawItem.src === "string" ? { src: rawItem.src } : {}),
       });
     }
@@ -296,11 +332,15 @@ export function parseCatalog(body: unknown): CatalogResult {
       id: rawCat.id,
       title: rawCat.title.trim(),
       sizes,
+      ...(catSet ? { sizeSet: catSet } : {}),
       colors,
       items: list,
     });
   }
-  return { ok: true, catalog: { categories } };
+  return {
+    ok: true,
+    catalog: { categories, ...(sizeSets.length ? { sizeSets } : {}) },
+  };
 }
 
 export const REVIEW_MAX = 500;

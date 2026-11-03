@@ -6,6 +6,7 @@ import type { StallStat } from "@/lib/stallStats";
 import { prettyRange } from "@/lib/time";
 import { StallMoneyChart, ChartCard } from "./charts";
 import { Delta } from "./figures";
+import Select from "./Select";
 
 const signed = (n: number) => `${n < 0 ? "−" : ""}${inr(Math.abs(n))}`;
 
@@ -82,8 +83,6 @@ export default function StallsView({
   const num = "num px-3 py-2.5 text-right whitespace-nowrap";
   const head =
     "text-olive/80 border-maroon/15 border-b text-[11px] tracking-[0.14em] uppercase";
-  const select =
-    "border-maroon/25 text-maroon min-h-11 min-w-0 flex-1 border bg-white/70 px-3 text-sm";
 
   const rows: {
     label: string;
@@ -227,19 +226,17 @@ export default function StallsView({
               ["First", a, (v: string) => setPick({ a: v, b })],
               ["Second", b, (v: string) => setPick({ a, b: v })],
             ].map(([label, value, set]) => (
-              <select
+              <Select
                 key={label as string}
                 value={value as string}
-                onChange={(e) => (set as (v: string) => void)(e.target.value)}
-                aria-label={`${label as string} stall to compare`}
-                className={select}
-              >
-                {withBills.map((s) => (
-                  <option key={s.name} value={s.name}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+                onChange={set as (v: string) => void}
+                label={`${label as string} stall to compare`}
+                className="min-w-0 flex-1 basis-48"
+                options={withBills.map((s) => ({
+                  value: s.name,
+                  label: s.name,
+                }))}
+              />
             ))}
           </div>
           {sa && sb && (

@@ -24,6 +24,13 @@ export type CatalogItem = {
    */
   cost?: number;
   /**
+   * Sizes offered for this item alone. Absent means it uses its category's sizes;
+   * an empty list means it has none (a free-size pair in a sized category).
+   */
+  sizes?: string[];
+  /** A named size option (see `SizeSet`) used instead of the category's sizes. */
+  sizeSet?: string;
+  /**
    * A bundled photograph. Only the starter items have one — adding a picture
    * from the iPad would need somewhere to store it, which is a separate job —
    * so anything added later shows a text tile.
@@ -36,15 +43,43 @@ export type CatalogCategory = {
   title: string;
   /** Sizes offered when an item here is tapped. Empty means no size question. */
   sizes: string[];
+  /** A named size option used instead of `sizes`; `sizes` is kept for switching back. */
+  sizeSet?: string;
   /** Colours offered when an item here is tapped. Empty means no colour question. */
   colors: string[];
   items: CatalogItem[];
 };
 
-export type Catalog = { categories: CatalogCategory[] };
+/**
+ * A named list of sizes, set up once and used by any category or item: "Shoe
+ * sizes", "Clothing", "Rings". Earrings pick none, shoes pick the shoe list.
+ */
+export type SizeSet = { id: string; name: string; sizes: string[] };
+
+export type Catalog = { categories: CatalogCategory[]; sizeSets?: SizeSet[] };
+
+/**
+ * The sizes an item asks for when tapped. An item's own choice wins (a named size
+ * option, its own list, or none); otherwise its category's (a named option, or the
+ * category's own list). A removed size option counts as not chosen.
+ */
+export function sizesFor(
+  catalog: Pick<Catalog, "sizeSets">,
+  category: Pick<CatalogCategory, "sizes" | "sizeSet">,
+  item: Pick<CatalogItem, "sizes" | "sizeSet">,
+): string[] {
+  const named = (id?: string) =>
+    id ? catalog.sizeSets?.find((s) => s.id === id)?.sizes : undefined;
+  return (
+    named(item.sizeSet) ??
+    item.sizes ??
+    named(category.sizeSet) ??
+    category.sizes
+  );
+}
 
 /** Offered for the starter juttis. Edit per category from the Items screen. */
-const JUTTI_SIZES = [
+export const JUTTI_SIZES = [
   "UK 3",
   "UK 4",
   "UK 5",
@@ -87,7 +122,7 @@ export const tilesOf = (catalog: Catalog): Tile[] =>
       ...i,
       categoryId: c.id,
       categoryTitle: c.title,
-      sizes: c.sizes,
+      sizes: sizesFor(catalog, c, i),
       colors: c.colors,
     })),
   );
@@ -103,6 +138,8 @@ export const LIMITS = {
   title: 60,
   sizes: 24,
   size: 12,
+  sizeSets: 12,
+  setName: 40,
   colors: 24,
   color: 20,
 } as const;
@@ -112,5 +149,6 @@ export const LIMITS = {
  * in so the rest of the app can rely on the field being there.
  */
 export const normalize = (c: Catalog): Catalog => ({
+  ...c,
   categories: c.categories.map((cat) => ({ ...cat, colors: cat.colors ?? [] })),
 });

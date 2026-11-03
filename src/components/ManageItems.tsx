@@ -3,15 +3,19 @@
 import { deleteItemPhoto, uploadItemPhoto } from "./photo";
 import { useState } from "react";
 import {
+  JUTTI_SIZES,
   LIMITS,
   defaultCatalog,
   newId,
+  sizesFor,
   type Catalog,
   type CatalogItem,
   type CatalogCategory,
+  type SizeSet,
 } from "@/lib/catalog";
 import { TEST_PRICES } from "@/lib/testPrices";
 import Modal from "./Modal";
+import Select from "./Select";
 import { useToast } from "./Toasts";
 import type { SaveState } from "./useCatalog";
 
@@ -69,6 +73,281 @@ const labelsOf = (v: string, maxLen: number, maxCount: number) =>
     .filter(Boolean)
     .slice(0, maxCount);
 
+/** Which named size option, if any, a pick like "set:abc123" stands for. */
+const setIdOf = (mode: string) =>
+  mode.startsWith("set:") ? mode.slice(4) : "";
+
+/**
+ * Size options: lists of sizes set up once ("Shoe sizes", "Rings") that any
+ * category or item can use, so earrings do not offer shoe sizes.
+ */
+function SizeOptions({
+  catalog,
+  onChange,
+}: {
+  catalog: Catalog;
+  onChange: (next: Catalog) => void;
+}) {
+  const sets = catalog.sizeSets ?? [];
+  const write = (next: SizeSet[]) => onChange({ ...catalog, sizeSets: next });
+  const patch = (id: string, p: Partial<SizeSet>) =>
+    write(sets.map((s) => (s.id === id ? { ...s, ...p } : s)));
+  const add = (name: string, sizes: string[]) =>
+    write([...sets, { id: newId(), name, sizes }]);
+  // Anything that used a removed option goes back to following its category.
+  const remove = (id: string) =>
+    onChange({
+      categories: catalog.categories.map((c) => ({
+        ...c,
+        sizeSet: c.sizeSet === id ? undefined : c.sizeSet,
+        items: c.items.map((i) =>
+          i.sizeSet === id ? { ...i, sizeSet: undefined } : i,
+        ),
+      })),
+      sizeSets: sets.filter((s) => s.id !== id),
+    });
+  const usedBy = (id: string) =>
+    catalog.categories.reduce(
+      (n, c) =>
+        n +
+        (c.sizeSet === id ? 1 : 0) +
+        c.items.filter((i) => i.sizeSet === id).length,
+      0,
+    );
+  const full = sets.length >= LIMITS.sizeSets;
+
+  return (
+    <section className="border-maroon/15 space-y-3 border bg-white/50 p-3">
+      <div>
+        <h3 className="font-display text-maroon text-lg">Size options</h3>
+        <p className="text-ink/60 text-sm">
+          Set up a list of sizes once, then choose it for a category or an item
+          below. Shoes can use “Shoe sizes” while earrings use none, or a
+          different list.
+        </p>
+      </div>
+      {sets.length > 0 && (
+        <ul className="space-y-3">
+          {sets.map((s) => (
+            <li key={s.id} className="flex flex-wrap items-end gap-x-3 gap-y-2">
+              <div className="w-full sm:w-52">
+                <label className={label} htmlFor={`so-n-${s.id}`}>
+                  Name
+                </label>
+                <Field
+                  id={`so-n-${s.id}`}
+                  key={`n:${s.name}`}
+                  value={s.name}
+                  maxLength={LIMITS.setName}
+                  onCommit={(v) => v.trim() && patch(s.id, { name: v.trim() })}
+                  className={box}
+                />
+              </div>
+              <div className="min-w-[12rem] flex-1">
+                <label className={label} htmlFor={`so-s-${s.id}`}>
+                  Sizes, separated by commas
+                </label>
+                <Field
+                  id={`so-s-${s.id}`}
+                  key={`s:${s.sizes.join("|")}`}
+                  value={s.sizes.join(", ")}
+                  placeholder="UK 5, UK 6, UK 7"
+                  onCommit={(v) =>
+                    patch(s.id, {
+                      sizes: labelsOf(v, LIMITS.size, LIMITS.sizes),
+                    })
+                  }
+                  className={box}
+                />
+              </div>
+              <button
+                onClick={() => remove(s.id)}
+                aria-label={`Remove size option ${s.name}`}
+                className={danger}
+              >
+                ×
+              </button>
+              {usedBy(s.id) > 0 && (
+                <span className="text-ink/45 basis-full text-xs">
+                  Used by {usedBy(s.id)}{" "}
+                  {usedBy(s.id) === 1 ? "place" : "places"}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {!sets.some((s) => s.name === "Shoe sizes") && (
+          <button
+            onClick={() => add("Shoe sizes", JUTTI_SIZES)}
+            disabled={full}
+            className={`${ghost} disabled:opacity-40`}
+          >
+            + Shoe sizes (UK 3–10)
+          </button>
+        )}
+        {!sets.some((s) => s.name === "Clothing sizes") && (
+          <button
+            onClick={() =>
+              add("Clothing sizes", ["XS", "S", "M", "L", "XL", "XXL"])
+            }
+            disabled={full}
+            className={`${ghost} disabled:opacity-40`}
+          >
+            + Clothing (XS–XXL)
+          </button>
+        )}
+        <button
+          onClick={() => add("New size option", [])}
+          disabled={full}
+          className={`${ghost} disabled:opacity-40`}
+        >
+          + Another size option
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/** What a category offers: no sizes, a size option, or a list of its own. */
+function CategorySizes({
+  category,
+  sets,
+  onChange,
+}: {
+  category: CatalogCategory;
+  sets: SizeSet[];
+  onChange: (patch: Partial<CatalogCategory>) => void;
+}) {
+  // "A list of its own" with nothing typed yet is an empty list, which would read
+  // as "none", so remember that it was picked.
+  const [picked, setPicked] = useState(false);
+  const chosen = sets.find((s) => s.id === category.sizeSet);
+  const mode = chosen
+    ? `set:${chosen.id}`
+    : category.sizes.length > 0 || picked
+      ? "own"
+      : "none";
+  return (
+    <div className="min-w-0">
+      <span className={label}>Sizes for items here</span>
+      <Select
+        value={mode}
+        onChange={(next) => {
+          setPicked(next === "own");
+          if (next === "none") onChange({ sizeSet: undefined, sizes: [] });
+          else if (next === "own") onChange({ sizeSet: undefined });
+          else onChange({ sizeSet: setIdOf(next) });
+        }}
+        label={`Sizes for ${category.title}`}
+        options={[
+          { value: "none", label: "No sizes" },
+          ...sets.map((s) => ({ value: `set:${s.id}`, label: s.name })),
+          { value: "own", label: "A list of its own" },
+        ]}
+      />
+      {chosen && (
+        <p className="text-ink/45 mt-1 text-xs">{chosen.sizes.join(", ")}</p>
+      )}
+      {mode === "own" && (
+        <Field
+          key={`s:${category.sizes.join("|")}`}
+          value={category.sizes.join(", ")}
+          placeholder="UK 5, UK 6, UK 7"
+          aria-label={`Sizes of ${category.title}`}
+          onCommit={(v) =>
+            onChange({ sizes: labelsOf(v, LIMITS.size, LIMITS.sizes) })
+          }
+          className={`${box} mt-2`}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Which sizes one item offers: its category's (the default), a size option, a
+ * list of its own, or none. "Its own" starts from the category's list, so it is
+ * trimmed rather than retyped.
+ */
+function ItemSizes({
+  item,
+  inherited,
+  sets,
+  onChange,
+}: {
+  item: CatalogItem;
+  /** What the category offers, for the hint and as the start of "its own". */
+  inherited: string[];
+  sets: SizeSet[];
+  onChange: (patch: {
+    sizes?: string[] | undefined;
+    sizeSet?: string | undefined;
+  }) => void;
+}) {
+  const [picked, setPicked] = useState(false);
+  const chosen = sets.find((s) => s.id === item.sizeSet);
+  const mode = chosen
+    ? `set:${chosen.id}`
+    : item.sizes === undefined
+      ? "same"
+      : item.sizes.length > 0 || picked
+        ? "own"
+        : "none";
+  return (
+    <div className="flex basis-full flex-wrap items-center gap-x-3 gap-y-2">
+      <span className="text-olive/80 text-xs tracking-[0.18em] uppercase">
+        Sizes
+      </span>
+      <Select
+        value={mode}
+        onChange={(next) => {
+          setPicked(next === "own");
+          if (next === "same")
+            onChange({ sizes: undefined, sizeSet: undefined });
+          else if (next === "none") onChange({ sizes: [], sizeSet: undefined });
+          else if (next === "own")
+            onChange({ sizes: [...inherited], sizeSet: undefined });
+          else onChange({ sizes: undefined, sizeSet: setIdOf(next) });
+        }}
+        label={`Sizes for ${item.name}`}
+        className="w-56"
+        options={[
+          {
+            value: "same",
+            label:
+              inherited.length > 0
+                ? "Same as the category"
+                : "None (category has none)",
+          },
+          ...sets.map((s) => ({ value: `set:${s.id}`, label: s.name })),
+          { value: "own", label: "Its own sizes" },
+          { value: "none", label: "No sizes" },
+        ]}
+      />
+      {mode === "own" && (
+        <Field
+          key={`z:${(item.sizes ?? []).join("|")}`}
+          value={(item.sizes ?? []).join(", ")}
+          placeholder="UK 5, UK 6, UK 7"
+          aria-label={`Sizes of ${item.name}`}
+          onCommit={(v) =>
+            onChange({ sizes: labelsOf(v, LIMITS.size, LIMITS.sizes) })
+          }
+          className={`${box} min-w-[12rem] flex-1`}
+        />
+      )}
+      {mode === "same" && inherited.length > 0 && (
+        <span className="text-ink/45 text-xs">{inherited.join(", ")}</span>
+      )}
+      {chosen && (
+        <span className="text-ink/45 text-xs">{chosen.sizes.join(", ")}</span>
+      )}
+    </div>
+  );
+}
+
 type Ask =
   | { kind: "category"; id: string }
   | { kind: "item"; catId: string; itemId: string }
@@ -103,6 +382,7 @@ export default function ManageItems({
 
   const patchCategory = (id: string, patch: Partial<CatalogCategory>) =>
     onChange({
+      ...catalog,
       categories: catalog.categories.map((c) =>
         c.id === id ? { ...c, ...patch } : c,
       ),
@@ -115,10 +395,13 @@ export default function ManageItems({
       name?: string;
       price?: number | null;
       cost?: number | undefined;
+      sizes?: string[] | undefined;
+      sizeSet?: string | undefined;
       src?: string;
     },
   ) =>
     onChange({
+      ...catalog,
       categories: catalog.categories.map((c) =>
         c.id === catId
           ? {
@@ -163,6 +446,7 @@ export default function ManageItems({
     const title = name.trim();
     if (!title) return;
     onChange({
+      ...catalog,
       categories: [
         ...catalog.categories,
         { id: newId(), title, sizes: [], colors: [], items: [] },
@@ -179,6 +463,7 @@ export default function ManageItems({
       toast.info("Item list reset to the starter items.");
     } else if (ask.kind === "category") {
       onChange({
+        ...catalog,
         categories: catalog.categories.filter((c) => c.id !== ask.id),
       });
       toast.info("Category removed.");
@@ -187,6 +472,7 @@ export default function ManageItems({
       void deleteItemPhoto(ask.itemId);
       if (stock?.[ask.itemId] !== undefined) onStock(ask.itemId, null);
       onChange({
+        ...catalog,
         categories: catalog.categories.map((c) =>
           c.id === ask.catId
             ? { ...c, items: c.items.filter((i) => i.id !== ask.itemId) }
@@ -214,9 +500,11 @@ export default function ManageItems({
           <p className="text-ink/60 text-sm">
             Prices left empty are asked for at the till. Type a stock number to
             count an item down as it sells; leave it empty to not count it. A
-            category with sizes or colours asks for them when an item is tapped.
-            Removing something only changes what the register offers; past
-            receipts keep what they sold for.
+            category or item with sizes or colours asks for them when it is
+            tapped. Sizes come from the size options below; an item can use a
+            different one, its own list, or none. Removing something only
+            changes what the register offers; past receipts keep what they sold
+            for.
           </p>
           {status.kind === "failed" ? (
             <span role="alert" className="text-maroon text-xs font-semibold">
@@ -242,6 +530,8 @@ export default function ManageItems({
             real prices before the real day.
           </p>
         )}
+
+        <SizeOptions catalog={catalog} onChange={onChange} />
 
         {catalog.categories.length === 0 && (
           <p className="text-ink/50 py-8 text-center text-sm">
@@ -277,23 +567,11 @@ export default function ManageItems({
                 </button>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={label} htmlFor={`s-${c.id}`}>
-                    Sizes (optional)
-                  </label>
-                  <Field
-                    id={`s-${c.id}`}
-                    key={`s:${c.sizes.join("|")}`}
-                    value={c.sizes.join(", ")}
-                    placeholder="UK 5, UK 6, UK 7"
-                    onCommit={(v) =>
-                      patchCategory(c.id, {
-                        sizes: labelsOf(v, LIMITS.size, LIMITS.sizes),
-                      })
-                    }
-                    className={box}
-                  />
-                </div>
+                <CategorySizes
+                  category={c}
+                  sets={catalog.sizeSets ?? []}
+                  onChange={(p) => patchCategory(c.id, p)}
+                />
                 <div>
                   <label className={label} htmlFor={`c-${c.id}`}>
                     Colours (optional)
@@ -404,6 +682,12 @@ export default function ManageItems({
                   >
                     ×
                   </button>
+                  <ItemSizes
+                    item={i}
+                    inherited={sizesFor(catalog, c, {})}
+                    sets={catalog.sizeSets ?? []}
+                    onChange={(p) => patchItem(c.id, i.id, p)}
+                  />
                 </li>
               ))}
               {c.items.length === 0 && (

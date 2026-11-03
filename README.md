@@ -35,7 +35,12 @@ database shows a setup message and won't open.
 
 - Open the **Items** tab and set your prices, add what you stock and remove what
   you don't. Categories can have their own sizes (juttis ask for one when
-  tapped). The list is saved to the database as you type.
+  tapped), and each item can override them with its own sizes, or none
+  (Sizes under the item: Same as the category / Its own sizes / No sizes).
+  **Size options** (top of the Items tab) are named lists of sizes set up once, such as
+  Shoe sizes or Clothing sizes. A category or an item picks one, so earrings do not show
+  shoe sizes. An item's own choice wins over its category's. They are saved inside the
+  item list, so no database change is needed. The list is saved to the database as you type.
 - `src/lib/config.ts`: the stall's address, phone and GSTIN (if any). Anything
   left empty is simply left off the receipt.
 

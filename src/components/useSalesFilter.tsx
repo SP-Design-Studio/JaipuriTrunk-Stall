@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { Sale, StallEntry } from "@/lib/types";
 import { dayKey, todayKey } from "@/lib/time";
+import Select from "./Select";
 
 /** The Today / All sales / stall choice shared by Sales and Analysis. */
 export function useSalesFilter(
@@ -99,23 +100,20 @@ export function FilterBar({ filter }: { filter: SalesFilter }) {
         </button>
       )}
       {stallOptions.length > 0 && (
-        <select
+        <Select
           value={stallFilter}
-          onChange={(e) => {
-            setStallFilter(e.target.value);
+          onChange={(v) => {
+            setStallFilter(v);
             // Looking at a past stall means looking at all of its days.
-            if (e.target.value !== "all") setRange("all");
+            if (v !== "all") setRange("all");
           }}
-          aria-label="Filter by stall"
-          className="border-maroon/25 text-maroon min-h-11 border bg-white/70 px-3 text-sm"
-        >
-          <option value="all">All stalls</option>
-          {stallOptions.map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
+          label="Filter by stall"
+          className="min-w-44"
+          options={[
+            { value: "all", label: "All stalls" },
+            ...stallOptions.map((n) => ({ value: n, label: n })),
+          ]}
+        />
       )}
     </div>
   );
